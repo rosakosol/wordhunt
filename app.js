@@ -402,9 +402,72 @@ function updatePathUI() {
   requestAnimationFrame(() => updatePathLine());
 }
 
-function tileFromPoint(clientX, clientY) {
-  const el = document.elementFromPoint(clientX, clientY);
-  return el?.closest?.(".tile") ?? null;
+/** Screen y increases downward; (dr,dc) row+ is down, col+ is right. */
+const OCTANT_DIRS = [
+  { dr: -1, dc: 0, ang: -Math.PI / 2 },
+  { dr: -1, dc: 1, ang: -Math.PI / 4 },
+  { dr: 0, dc: 1, ang: 0 },
+  { dr: 1, dc: 1, ang: Math.PI / 4 },
+  { dr: 1, dc: 0, ang: Math.PI / 2 },
+  { dr: 1, dc: -1, ang: (3 * Math.PI) / 4 },
+  { dr: 0, dc: -1, ang: Math.PI },
+  { dr: -1, dc: -1, ang: (-3 * Math.PI) / 4 },
+];
+
+function angularDiff(a, b) {
+  let d = a - b;
+  while (d > Math.PI) d -= 2 * Math.PI;
+  while (d < -Math.PI) d += 2 * Math.PI;
+  return Math.abs(d);
+}
+
+/**
+ * Pick which neighbor of the path end the user is aiming at (octant from last tile center).
+ * Avoids elementFromPoint missing gaps and favoring left/right over diagonals.
+ */
+function neighborFromPointer(lastR, lastC, clientX, clientY) {
+  const tile = els.board.querySelector(`[data-r="${lastR}"][data-c="${lastC}"]`);
+  if (!tile) return null;
+  const rect = tile.getBoundingClientRect();
+  // No neighbor until the pointer has left the *current* path tile. Angle-from-center
+  // alone mis-reads corners/diagonals while you're still inside this cell.
+  if (
+    clientX >= rect.left &&
+    clientX <= rect.right &&
+    clientY >= rect.top &&
+    clientY <= rect.bottom
+  ) {
+    return null;
+  }
+
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  const dx = clientX - cx;
+  const dy = clientY - cy;
+  const angle = Math.atan2(dy, dx);
+  let best = OCTANT_DIRS[0];
+  let bestDiff = angularDiff(angle, best.ang);
+  for (let i = 1; i < OCTANT_DIRS.length; i++) {
+    const d = OCTANT_DIRS[i];
+    const diff = angularDiff(angle, d.ang);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = d;
+    }
+  }
+
+  const nr = lastR + best.dr;
+  const nc = lastC + best.dc;
+  if (nr < 0 || nr > 3 || nc < 0 || nc > 3) return null;
+  return [nr, nc];
+}
+
+function applyPointerToPath(clientX, clientY) {
+  if (!dragging || !timerId || !path.length) return;
+  const last = path[path.length - 1];
+  const hit = neighborFromPointer(last[0], last[1], clientX, clientY);
+  if (!hit) return;
+  extendPathTo(hit[0], hit[1]);
 }
 
 function extendPathTo(r, c) {
@@ -444,18 +507,12 @@ function onTilePointerDown(e) {
 
 function onTilePointerEnter(e) {
   if (!dragging || !timerId) return;
-  const r = Number(e.currentTarget.dataset.r);
-  const c = Number(e.currentTarget.dataset.c);
-  extendPathTo(r, c);
+  applyPointerToPath(e.clientX, e.clientY);
 }
 
 function onWindowPointerMove(e) {
   if (!dragging || !timerId) return;
-  const tile = tileFromPoint(e.clientX, e.clientY);
-  if (!tile) return;
-  const r = Number(tile.dataset.r);
-  const c = Number(tile.dataset.c);
-  extendPathTo(r, c);
+  applyPointerToPath(e.clientX, e.clientY);
 }
 
 function submitPath() {
@@ -520,6 +577,7 @@ function enterMultiGameFromState(st) {
   els.game.hidden = false;
   els.modalEnd.hidden = true;
   els.modalMpResult.hidden = true;
+  els.modalMpWait.hidden = true;
   els.mpRolePill.hidden = false;
   els.mpRolePill.textContent = mp.role === "host" ? "You are Host" : "You are Guest";
 
@@ -617,6 +675,8 @@ function endRound() {
     els.modalEnd.hidden = false;
     submitMpScoreAndFinish();
   } else {
+    els.modalMpWait.hidden = true;
+    els.modalMpWait.textContent = "Sending score… waiting for opponent to finish.";
     els.modalEnd.hidden = false;
   }
 }
@@ -647,6 +707,7 @@ function startSoloRound() {
   els.game.hidden = false;
   els.modalEnd.hidden = true;
   els.modalMpResult.hidden = true;
+  els.modalMpWait.hidden = true;
 
   startGameTimer();
 }

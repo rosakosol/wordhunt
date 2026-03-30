@@ -494,19 +494,23 @@ body {
 .modal-word-list {
   list-style: none;
   margin: 1rem 0;
-  padding: 0.5rem 0;
-  max-height: 10rem;
+  padding: 0.35rem 0.25rem;
+  max-height: 12rem;
   overflow-y: auto;
+  overflow-x: hidden;
   text-align: left;
-  columns: 2;
-  column-gap: 1rem;
   font-size: 0.85rem;
   color: var(--muted);
+  -webkit-overflow-scrolling: touch;
 }
 
 .modal-word-list li {
-  break-inside: avoid;
-  padding: 0.15rem 0;
+  padding: 0.28rem 0;
+  border-bottom: 1px solid var(--surface-2);
+}
+
+.modal-word-list li:last-child {
+  border-bottom: none;
 }
 
 .modal-card .btn {
