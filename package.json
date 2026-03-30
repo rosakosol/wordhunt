@@ -1,5 +1,9 @@
 {
   "name": "wordhunt",
   "private": true,
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "@upstash/redis": "^1.34.3"
+  }
 }

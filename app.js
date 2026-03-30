@@ -24,6 +24,23 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 
 const MIN_WORD_LEN = 3;
 
+const API_MP = "/api/mp";
+
+const MIN_ROUND_MIN = 1;
+const MAX_ROUND_MIN = 5;
+
+/** @type {{ active: boolean, role: string | null, roomId: string | null, secret: string | null, endsAt: number | null }} */
+const mp = {
+  active: false,
+  role: null,
+  roomId: null,
+  secret: null,
+  endsAt: null,
+};
+
+let mpPollTimer = null;
+let mpResultPollTimer = null;
+
 /** Points by word length: 3→100, 4→400, 5→800; same curve continues (50n² − 50n − 200). */
 function scoreForWord(len) {
   if (len < MIN_WORD_LEN) return 0;
@@ -94,6 +111,24 @@ const els = {
   finalWords: document.getElementById("final-words"),
   finalWordList: document.getElementById("final-word-list"),
   btnPlayAgain: document.getElementById("btn-play-again"),
+  modalMpWait: document.getElementById("modal-mp-wait"),
+  modalMpResult: document.getElementById("modal-mp-result"),
+  mpResultTitle: document.getElementById("mp-result-title"),
+  mpResultBody: document.getElementById("mp-result-body"),
+  mpResultScores: document.getElementById("mp-result-scores"),
+  btnMpDone: document.getElementById("btn-mp-done"),
+  tabSolo: document.getElementById("tab-solo"),
+  tabMulti: document.getElementById("tab-multi"),
+  soloPanel: document.getElementById("solo-panel"),
+  multiPanel: document.getElementById("multi-panel"),
+  btnCreateMp: document.getElementById("btn-create-mp"),
+  mpHostLobby: document.getElementById("mp-host-lobby"),
+  mpGuestWait: document.getElementById("mp-guest-wait"),
+  mpGuestUrl: document.getElementById("mp-guest-url"),
+  btnCopyGuest: document.getElementById("btn-copy-guest"),
+  btnMpBegin: document.getElementById("btn-mp-begin"),
+  mpGuestMsg: document.getElementById("mp-guest-msg"),
+  mpRolePill: document.getElementById("mp-role-pill"),
 };
 
 let board = [];
@@ -107,9 +142,6 @@ let timerId = null;
 let secondsLeft = 0;
 /** @type {ResizeObserver | null} */
 let pathResizeObserver = null;
-
-const MIN_ROUND_MIN = 1;
-const MAX_ROUND_MIN = 5;
 
 function formatTime(sec) {
   const m = Math.floor(sec / 60);
@@ -134,6 +166,131 @@ function syncDurationControls(fromSlider) {
   }
   const minutes = Number(els.durationInput.value);
   els.durationSlider.setAttribute("aria-valuetext", formatMinutesAria(minutes));
+}
+
+function clearMpPollers() {
+  if (mpPollTimer) {
+    clearInterval(mpPollTimer);
+    mpPollTimer = null;
+  }
+  if (mpResultPollTimer) {
+    clearInterval(mpResultPollTimer);
+    mpResultPollTimer = null;
+  }
+}
+
+function mpSessionKey(roomId) {
+  return `wh_mp_room_${roomId}`;
+}
+
+function saveMpSession(roomId, data) {
+  try {
+    sessionStorage.setItem(mpSessionKey(roomId), JSON.stringify(data));
+  } catch {
+    /* ignore */
+  }
+}
+
+function loadMpSession(roomId) {
+  try {
+    const raw = sessionStorage.getItem(mpSessionKey(roomId));
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function mpFetchState(roomId, role, secret) {
+  const u = new URL(API_MP, window.location.origin);
+  u.searchParams.set("action", "state");
+  u.searchParams.set("roomId", roomId);
+  u.searchParams.set("p", role);
+  u.searchParams.set("s", secret);
+  const res = await fetch(u.toString());
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.message || data.error || res.statusText);
+  return data;
+}
+
+async function mpPost(action, body) {
+  const u = new URL(API_MP, window.location.origin);
+  u.searchParams.set("action", action);
+  const res = await fetch(u.toString(), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.message || data.error || res.statusText);
+  return data;
+}
+
+function parseMpUrl() {
+  const q = new URLSearchParams(window.location.search);
+  const roomId = q.get("mp");
+  const role = q.get("p");
+  const secret = q.get("s");
+  if (!roomId || !secret || (role !== "host" && role !== "guest")) return null;
+  return { roomId, role, secret };
+}
+
+function setHostUrl(roomId, hostSecret) {
+  const u = new URL(window.location.href);
+  u.searchParams.set("mp", roomId);
+  u.searchParams.set("p", "host");
+  u.searchParams.set("s", hostSecret);
+  history.replaceState(null, "", u.toString());
+}
+
+function setModeTab(solo) {
+  els.tabSolo.classList.toggle("active", solo);
+  els.tabMulti.classList.toggle("active", !solo);
+  els.tabSolo.setAttribute("aria-selected", solo ? "true" : "false");
+  els.tabMulti.setAttribute("aria-selected", solo ? "false" : "true");
+  els.soloPanel.hidden = !solo;
+  els.multiPanel.hidden = solo;
+}
+
+function stopGameTimer() {
+  if (timerId) {
+    clearInterval(timerId);
+    timerId = null;
+  }
+}
+
+function tickTimerSolo() {
+  secondsLeft -= 1;
+  els.timer.textContent = formatTime(secondsLeft);
+  els.timer.classList.remove("low", "critical");
+  if (secondsLeft <= 10) els.timer.classList.add("critical");
+  else if (secondsLeft <= 30) els.timer.classList.add("low");
+  if (secondsLeft <= 0) {
+    stopGameTimer();
+    endRound();
+  }
+}
+
+function tickTimerMulti() {
+  if (mp.endsAt == null) return;
+  secondsLeft = Math.max(0, Math.ceil((mp.endsAt - Date.now()) / 1000));
+  els.timer.textContent = formatTime(secondsLeft);
+  els.timer.classList.remove("low", "critical");
+  if (secondsLeft <= 10) els.timer.classList.add("critical");
+  else if (secondsLeft <= 30) els.timer.classList.add("low");
+  if (secondsLeft <= 0) {
+    stopGameTimer();
+    endRound();
+  }
+}
+
+function startGameTimer() {
+  stopGameTimer();
+  if (mp.active && mp.endsAt != null) {
+    tickTimerMulti();
+    timerId = setInterval(tickTimerMulti, 500);
+  } else {
+    timerId = setInterval(tickTimerSolo, 1000);
+  }
 }
 
 function ensurePathResizeObserver() {
@@ -330,19 +487,142 @@ function onGlobalPointerUp() {
   }
 }
 
-function tickTimer() {
-  secondsLeft -= 1;
-  els.timer.textContent = formatTime(secondsLeft);
-  els.timer.classList.remove("low", "critical");
-  if (secondsLeft <= 10) els.timer.classList.add("critical");
-  else if (secondsLeft <= 30) els.timer.classList.add("low");
+function resetMpState() {
+  mp.active = false;
+  mp.role = null;
+  mp.roomId = null;
+  mp.secret = null;
+  mp.endsAt = null;
+  clearMpPollers();
+  els.mpRolePill.hidden = true;
+}
 
-  if (secondsLeft <= 0) {
+function enterMultiGameFromState(st) {
+  clearMpPollers();
+  board = st.board;
+  mp.endsAt = st.endsAt;
+  mp.active = true;
+  score = 0;
+  foundWords = new Set();
+  path = [];
+  dragging = false;
+
+  els.score.textContent = "0";
+  els.foundList.replaceChildren();
+  els.foundCount.textContent = "0";
+  els.timer.classList.remove("low", "critical");
+  els.currentWord.textContent = "—";
+
+  renderBoard();
+  updatePathUI();
+
+  els.setup.hidden = true;
+  els.game.hidden = false;
+  els.modalEnd.hidden = true;
+  els.modalMpResult.hidden = true;
+  els.mpRolePill.hidden = false;
+  els.mpRolePill.textContent = mp.role === "host" ? "You are Host" : "You are Guest";
+
+  if (mp.endsAt != null && Date.now() >= mp.endsAt) {
+    secondsLeft = 0;
+    els.timer.textContent = formatTime(0);
     endRound();
+    return;
+  }
+
+  startGameTimer();
+}
+
+function showMpResultFromState(st) {
+  const hs = st.hostScore ?? 0;
+  const gs = st.guestScore ?? 0;
+  let outcome = "";
+  if (mp.role === "host") {
+    if (hs > gs) outcome = "You win!";
+    else if (gs > hs) outcome = "Opponent wins.";
+    else outcome = "Tie game!";
+  } else {
+    if (gs > hs) outcome = "You win!";
+    else if (hs > gs) outcome = "Opponent wins.";
+    else outcome = "Tie game!";
+  }
+  els.mpResultTitle.textContent = outcome;
+  els.mpResultBody.textContent = "Highest score wins — same letters, same time limit.";
+  els.mpResultScores.textContent = `Host ${hs} pts · Guest ${gs} pts`;
+  els.modalMpResult.hidden = false;
+  els.modalEnd.hidden = true;
+  stopGameTimer();
+}
+
+async function submitMpScoreAndFinish() {
+  if (!mp.active || !mp.roomId || !mp.secret || !mp.role) return;
+  try {
+    const sub = await mpPost("submit", {
+      roomId: mp.roomId,
+      role: mp.role,
+      secret: mp.secret,
+      score,
+      wordCount: foundWords.size,
+    });
+    if (sub.bothDone) {
+      showMpResultFromState({
+        hostScore: sub.hostScore,
+        guestScore: sub.guestScore,
+      });
+      els.modalMpWait.hidden = true;
+    } else {
+      els.modalMpWait.hidden = false;
+      mpResultPollTimer = setInterval(async () => {
+        try {
+          const st = await mpFetchState(mp.roomId, mp.role, mp.secret);
+          if (st.hostSubmitted && st.guestSubmitted) {
+            clearInterval(mpResultPollTimer);
+            mpResultPollTimer = null;
+            showMpResultFromState({
+              hostScore: st.hostScore,
+              guestScore: st.guestScore,
+            });
+            els.modalMpWait.hidden = true;
+          }
+        } catch {
+          /* keep polling */
+        }
+      }, 1500);
+    }
+  } catch (e) {
+    els.modalMpWait.textContent = `Could not submit score: ${e.message}`;
+    els.modalMpWait.hidden = false;
   }
 }
 
-function startRound() {
+function endRound() {
+  stopGameTimer();
+  dragging = false;
+  path = [];
+  updatePathUI();
+
+  const sorted = [...foundWords].sort();
+  els.finalScore.textContent = String(score);
+  els.finalWords.textContent = String(foundWords.size);
+  els.finalWordList.replaceChildren();
+  sorted.forEach((w) => {
+    const li = document.createElement("li");
+    li.textContent = w;
+    els.finalWordList.appendChild(li);
+  });
+
+  if (mp.active) {
+    els.modalMpWait.hidden = true;
+    els.modalMpWait.textContent = "Sending score… waiting for opponent to finish.";
+    els.modalEnd.hidden = false;
+    submitMpScoreAndFinish();
+  } else {
+    els.modalEnd.hidden = false;
+  }
+}
+
+function startSoloRound() {
+  resetMpState();
   let minutes = Number(els.durationInput.value);
   if (!Number.isFinite(minutes)) minutes = 2;
   minutes = Math.min(MAX_ROUND_MIN, Math.max(MIN_ROUND_MIN, Math.round(minutes)));
@@ -366,36 +646,180 @@ function startRound() {
   els.setup.hidden = true;
   els.game.hidden = false;
   els.modalEnd.hidden = true;
+  els.modalMpResult.hidden = true;
 
-  if (timerId) clearInterval(timerId);
-  timerId = setInterval(tickTimer, 1000);
+  startGameTimer();
 }
 
-function endRound() {
-  if (timerId) {
-    clearInterval(timerId);
-    timerId = null;
+async function createMultiplayerRoom() {
+  if (!wordSet || wordSet.size === 0) {
+    els.loadStatus.hidden = false;
+    els.loadStatus.textContent = "Dictionary not ready.";
+    return;
   }
-  dragging = false;
-  path = [];
-  updatePathUI();
+  els.btnCreateMp.disabled = true;
+  els.loadStatus.hidden = false;
+  els.loadStatus.textContent = "Creating room…";
+  try {
+    let minutes = Number(els.durationInput.value);
+    if (!Number.isFinite(minutes)) minutes = 2;
+    minutes = Math.min(MAX_ROUND_MIN, Math.max(MIN_ROUND_MIN, Math.round(minutes)));
+    const b = rollBoard();
+    const data = await mpPost("create", { board: b, durationMinutes: minutes });
+    const guestUrl = `${window.location.origin}${window.location.pathname}?mp=${encodeURIComponent(data.roomId)}&p=guest&s=${encodeURIComponent(data.guestSecret)}`;
+    saveMpSession(data.roomId, {
+      guestUrl,
+      hostSecret: data.hostSecret,
+      guestSecret: data.guestSecret,
+    });
+    mp.roomId = data.roomId;
+    mp.role = "host";
+    mp.secret = data.hostSecret;
+    setHostUrl(data.roomId, data.hostSecret);
+    els.mpGuestUrl.value = guestUrl;
+    els.mpHostLobby.hidden = false;
+    els.loadStatus.hidden = true;
+  } catch (e) {
+    els.loadStatus.hidden = false;
+    els.loadStatus.textContent = e.message || String(e);
+  } finally {
+    els.btnCreateMp.disabled = false;
+  }
+}
 
-  const sorted = [...foundWords].sort();
-  els.finalScore.textContent = String(score);
-  els.finalWords.textContent = String(foundWords.size);
-  els.finalWordList.replaceChildren();
-  sorted.forEach((w) => {
-    const li = document.createElement("li");
-    li.textContent = w;
-    els.finalWordList.appendChild(li);
-  });
-  els.modalEnd.hidden = false;
+async function hostBeginMatch() {
+  if (!mp.roomId || !mp.secret) return;
+  els.btnMpBegin.disabled = true;
+  els.loadStatus.hidden = false;
+  els.loadStatus.textContent = "Starting match…";
+  try {
+    const data = await mpPost("start", { roomId: mp.roomId, secret: mp.secret });
+    mp.active = true;
+    mp.role = "host";
+    mp.secret = mp.secret;
+    mp.endsAt = data.endsAt;
+    enterMultiGameFromState(data);
+    els.loadStatus.hidden = true;
+  } catch (e) {
+    els.loadStatus.hidden = false;
+    els.loadStatus.textContent = e.message || String(e);
+  } finally {
+    els.btnMpBegin.disabled = false;
+  }
+}
+
+function startGuestPolling() {
+  if (!mp.roomId || !mp.secret || mp.role !== "guest") return;
+  clearMpPollers();
+  mpPollTimer = setInterval(async () => {
+    try {
+      const st = await mpFetchState(mp.roomId, "guest", mp.secret);
+      if (st.endsAt) {
+        clearInterval(mpPollTimer);
+        mpPollTimer = null;
+        if (Date.now() >= st.endsAt) {
+          els.mpGuestMsg.textContent = "This match already ended. Ask your host for a new link.";
+          return;
+        }
+        mp.active = true;
+        mp.endsAt = st.endsAt;
+        enterMultiGameFromState(st);
+      }
+    } catch {
+      els.mpGuestMsg.textContent = "Could not reach server. Check multiplayer setup (Redis env vars).";
+    }
+  }, 1200);
+}
+
+async function resumeHostFromUrl() {
+  const params = parseMpUrl();
+  if (!params || params.role !== "host") return;
+  mp.roomId = params.roomId;
+  mp.role = "host";
+  mp.secret = params.secret;
+  setModeTab(false);
+  els.multiPanel.hidden = false;
+  els.soloPanel.hidden = true;
+  const saved = loadMpSession(params.roomId);
+  if (saved?.guestUrl) {
+    els.mpGuestUrl.value = saved.guestUrl;
+    els.mpHostLobby.hidden = false;
+  } else {
+    els.mpHostLobby.hidden = false;
+    els.mpGuestUrl.value = "(Create a new room to get a guest link — session expired.)";
+  }
+  try {
+    const st = await mpFetchState(params.roomId, "host", params.secret);
+    if (st.endsAt) {
+      if (st.hostSubmitted && st.guestSubmitted) {
+        showMpResultFromState({ hostScore: st.hostScore, guestScore: st.guestScore });
+        els.setup.hidden = false;
+        els.game.hidden = true;
+        return;
+      }
+      if (Date.now() < st.endsAt) {
+        mp.active = true;
+        mp.endsAt = st.endsAt;
+        enterMultiGameFromState(st);
+        return;
+      }
+      mp.active = true;
+      mp.endsAt = st.endsAt;
+      enterMultiGameFromState(st);
+      return;
+    }
+  } catch (e) {
+    els.loadStatus.hidden = false;
+    els.loadStatus.textContent = e.message || String(e);
+  }
+}
+
+async function resumeGuestFromUrl() {
+  const params = parseMpUrl();
+  if (!params || params.role !== "guest") return;
+  mp.roomId = params.roomId;
+  mp.role = "guest";
+  mp.secret = params.secret;
+  setModeTab(false);
+  els.multiPanel.hidden = false;
+  els.soloPanel.hidden = true;
+  els.mpGuestWait.hidden = false;
+  try {
+    const st = await mpFetchState(params.roomId, "guest", params.secret);
+    if (st.hostSubmitted && st.guestSubmitted) {
+      showMpResultFromState({ hostScore: st.hostScore, guestScore: st.guestScore });
+      return;
+    }
+    if (st.endsAt) {
+      mp.active = true;
+      mp.endsAt = st.endsAt;
+      enterMultiGameFromState(st);
+      return;
+    }
+    startGuestPolling();
+  } catch (e) {
+    els.mpGuestMsg.textContent = e.message || String(e);
+  }
+}
+
+function backToMenu() {
+  clearMpPollers();
+  resetMpState();
+  els.modalMpResult.hidden = true;
+  els.modalEnd.hidden = true;
+  els.setup.hidden = false;
+  els.game.hidden = true;
+  history.replaceState(null, "", window.location.pathname);
+  els.mpHostLobby.hidden = true;
+  els.mpGuestWait.hidden = true;
+  setModeTab(true);
 }
 
 async function loadDictionary() {
   els.loadStatus.hidden = false;
   els.loadStatus.textContent = "Loading dictionary…";
   els.btnStart.disabled = true;
+  els.btnCreateMp.disabled = true;
   try {
     const res = await fetch("./words.json");
     if (!res.ok) throw new Error("Failed to load words");
@@ -409,8 +833,12 @@ async function loadDictionary() {
       "Could not load dictionary. Run a local server (e.g. npx serve) so words.json can load.";
   } finally {
     els.btnStart.disabled = false;
+    els.btnCreateMp.disabled = false;
   }
 }
+
+els.tabSolo.addEventListener("click", () => setModeTab(true));
+els.tabMulti.addEventListener("click", () => setModeTab(false));
 
 els.durationSlider.addEventListener("input", () => syncDurationControls(true));
 els.durationInput.addEventListener("change", () => syncDurationControls(false));
@@ -421,19 +849,45 @@ els.btnStart.addEventListener("click", () => {
     els.loadStatus.textContent = "Dictionary not ready. Check words.json and use a local server.";
     return;
   }
-  startRound();
+  startSoloRound();
 });
+
+els.btnCreateMp.addEventListener("click", () => createMultiplayerRoom());
+els.btnCopyGuest.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(els.mpGuestUrl.value);
+    els.btnCopyGuest.textContent = "Copied!";
+    setTimeout(() => {
+      els.btnCopyGuest.textContent = "Copy";
+    }, 2000);
+  } catch {
+    els.mpGuestUrl.select();
+    document.execCommand("copy");
+  }
+});
+els.btnMpBegin.addEventListener("click", () => hostBeginMatch());
 
 els.btnEndEarly.addEventListener("click", endRound);
 els.btnPlayAgain.addEventListener("click", () => {
-  els.modalEnd.hidden = true;
-  els.setup.hidden = false;
-  els.game.hidden = true;
+  if (mp.active || mp.roomId) {
+    backToMenu();
+  } else {
+    els.modalEnd.hidden = true;
+    els.setup.hidden = false;
+    els.game.hidden = true;
+  }
 });
+els.btnMpDone.addEventListener("click", () => backToMenu());
 
 window.addEventListener("pointermove", onWindowPointerMove);
 window.addEventListener("pointerup", onGlobalPointerUp);
 window.addEventListener("pointercancel", onGlobalPointerUp);
 
 syncDurationControls(true);
-loadDictionary();
+
+(async () => {
+  await loadDictionary();
+  const q = parseMpUrl();
+  if (q?.role === "host") await resumeHostFromUrl();
+  else if (q?.role === "guest") await resumeGuestFromUrl();
+})();

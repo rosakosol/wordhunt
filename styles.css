@@ -59,6 +59,97 @@ body {
   font-weight: 600;
 }
 
+.mode-tabs {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+  padding: 0.25rem;
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.mode-tab {
+  flex: 1;
+  padding: 0.55rem 0.75rem;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-weight: 800;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.mode-tab:hover {
+  color: var(--text);
+}
+
+.mode-tab.active {
+  background: var(--surface-2);
+  color: var(--accent);
+}
+
+.multi-intro a {
+  color: var(--accent);
+}
+
+.copy-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.copy-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  border: 2px solid var(--surface-2);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.75rem;
+}
+
+.btn.secondary {
+  flex-shrink: 0;
+  width: auto;
+  padding: 0.5rem 0.85rem;
+  background: var(--surface-2);
+  color: var(--text);
+  box-shadow: none;
+}
+
+.btn.secondary:hover {
+  filter: brightness(1.08);
+}
+
+.mp-wait-title {
+  margin: 0;
+  text-align: center;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.mp-role-pill {
+  margin: 0 0 0.65rem;
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.modal-wait {
+  margin: 0.75rem 0 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+  text-align: center;
+}
+
 .setup .field {
   display: block;
   background: var(--surface);

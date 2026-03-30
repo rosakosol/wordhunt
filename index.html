@@ -37,13 +37,46 @@
               <span class="unit">min</span>
             </div>
           </div>
-          <p class="hint">Drag the slider or type minutes (1–5).</p>
+          <p class="hint">Drag the slider or type minutes (1–5). Used for solo and multiplayer.</p>
         </label>
+
+        <div class="mode-tabs" role="tablist" aria-label="Game mode">
+          <button type="button" class="mode-tab active" id="tab-solo" role="tab" aria-selected="true">Solo</button>
+          <button type="button" class="mode-tab" id="tab-multi" role="tab" aria-selected="false">Multiplayer</button>
+        </div>
+
+        <div id="solo-panel">
         <button type="button" class="btn primary" id="btn-start">Start game</button>
+        </div>
+
+        <div id="multi-panel" hidden>
+          <p class="hint multi-intro">
+            Same board and clock for both players. Highest score wins. Requires free
+            <a href="https://upstash.com" target="_blank" rel="noopener noreferrer">Upstash Redis</a> env vars on Vercel.
+          </p>
+          <button type="button" class="btn primary" id="btn-create-mp">Create room &amp; get guest link</button>
+          <div class="mp-host-lobby field" id="mp-host-lobby" hidden>
+            <span class="field-label">Guest link — send to your opponent</span>
+            <div class="copy-row">
+              <input type="text" readonly id="mp-guest-url" class="copy-input" />
+              <button type="button" class="btn secondary" id="btn-copy-guest">Copy</button>
+            </div>
+            <p class="hint">
+              Keep this tab open. Your link is in the address bar (host). When your friend is ready, start the match — both
+              timers run from the same end time.
+            </p>
+            <button type="button" class="btn primary" id="btn-mp-begin">Begin match</button>
+          </div>
+          <div class="mp-guest-wait field" id="mp-guest-wait" hidden>
+            <p class="mp-wait-title" id="mp-guest-msg">Waiting for host to start the match…</p>
+          </div>
+        </div>
+
         <p class="load-status" id="load-status" hidden>Loading dictionary…</p>
       </section>
 
       <section class="game" id="game" hidden>
+        <p class="mp-role-pill" id="mp-role-pill" hidden></p>
         <div class="hud">
           <div class="hud-block">
             <span class="hud-label">Time</span>
@@ -82,7 +115,17 @@
           <p class="modal-score">Score: <strong id="final-score">0</strong></p>
           <p class="modal-words">Words found: <strong id="final-words">0</strong></p>
           <ul class="modal-word-list" id="final-word-list"></ul>
+          <p class="modal-wait" id="modal-mp-wait" hidden>Sending score… waiting for opponent to finish.</p>
           <button type="button" class="btn primary" id="btn-play-again">Play again</button>
+        </div>
+      </div>
+
+      <div class="modal" id="modal-mp-result" hidden>
+        <div class="modal-card">
+          <h2 id="mp-result-title">Match result</h2>
+          <p class="modal-score" id="mp-result-body"></p>
+          <p class="modal-words" id="mp-result-scores"></p>
+          <button type="button" class="btn primary" id="btn-mp-done">Back to menu</button>
         </div>
       </div>
     </div>
