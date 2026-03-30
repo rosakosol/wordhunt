@@ -20,6 +20,8 @@ const BOGGLE_DICE = [
   ["H", "L", "N", "N", "R", "Z"],
 ];
 
+const SVG_NS = "http://www.w3.org/2000/svg";
+
 const MIN_WORD_LEN = 3;
 
 /** Boggle-style points by word length */
@@ -85,6 +87,7 @@ const els = {
   durationInput: document.getElementById("duration-input"),
   btnStart: document.getElementById("btn-start"),
   board: document.getElementById("board"),
+  boardPath: document.getElementById("board-path"),
   timer: document.getElementById("timer"),
   score: document.getElementById("score"),
   currentWord: document.getElementById("current-word"),
@@ -107,6 +110,8 @@ let score = 0;
 let foundWords = new Set();
 let timerId = null;
 let secondsLeft = 0;
+/** @type {ResizeObserver | null} */
+let pathResizeObserver = null;
 
 const MIN_ROUND_MIN = 1;
 const MAX_ROUND_MIN = 5;
@@ -136,6 +141,79 @@ function syncDurationControls(fromSlider) {
   els.durationSlider.setAttribute("aria-valuetext", formatMinutesAria(minutes));
 }
 
+function ensurePathResizeObserver() {
+  const stack = els.board.parentElement;
+  if (!stack?.classList.contains("board-stack") || pathResizeObserver) return;
+  pathResizeObserver = new ResizeObserver(() => {
+    if (path.length) requestAnimationFrame(() => updatePathLine());
+  });
+  pathResizeObserver.observe(stack);
+}
+
+function updatePathLine() {
+  const svg = els.boardPath;
+  const boardEl = els.board;
+  if (!svg || !boardEl) return;
+
+  svg.replaceChildren();
+
+  if (path.length === 0) return;
+
+  const br = boardEl.getBoundingClientRect();
+  const bw = br.width;
+  const bh = br.height;
+  if (bw < 1 || bh < 1) return;
+
+  svg.setAttribute("viewBox", `0 0 ${bw} ${bh}`);
+  svg.setAttribute("preserveAspectRatio", "none");
+
+  /** @type {{ x: number, y: number }[]} */
+  const centers = [];
+  for (const [r, c] of path) {
+    const tile = boardEl.querySelector(`[data-r="${r}"][data-c="${c}"]`);
+    if (!tile) continue;
+    const tr = tile.getBoundingClientRect();
+    centers.push({
+      x: tr.left + tr.width / 2 - br.left,
+      y: tr.top + tr.height / 2 - br.top,
+    });
+  }
+
+  if (centers.length === 0) return;
+
+  const pointsStr = centers.map((p) => `${p.x},${p.y}`).join(" ");
+
+  if (centers.length >= 2) {
+    const halo = document.createElementNS(SVG_NS, "polyline");
+    halo.setAttribute("class", "path-halo");
+    halo.setAttribute("points", pointsStr);
+    halo.setAttribute("fill", "none");
+    halo.setAttribute("stroke-width", "12");
+    halo.setAttribute("stroke-linecap", "round");
+    halo.setAttribute("stroke-linejoin", "round");
+    svg.appendChild(halo);
+
+    const line = document.createElementNS(SVG_NS, "polyline");
+    line.setAttribute("class", "path-line");
+    line.setAttribute("points", pointsStr);
+    line.setAttribute("fill", "none");
+    line.setAttribute("stroke-width", "4");
+    line.setAttribute("stroke-linecap", "round");
+    line.setAttribute("stroke-linejoin", "round");
+    svg.appendChild(line);
+  }
+
+  centers.forEach((p, i) => {
+    const circle = document.createElementNS(SVG_NS, "circle");
+    circle.setAttribute("cx", String(p.x));
+    circle.setAttribute("cy", String(p.y));
+    const isEnd = i === centers.length - 1;
+    circle.setAttribute("r", isEnd ? "7" : "5");
+    circle.setAttribute("class", isEnd ? "path-node path-node-end" : "path-node");
+    svg.appendChild(circle);
+  });
+}
+
 function renderBoard() {
   els.board.replaceChildren();
   for (let r = 0; r < 4; r++) {
@@ -153,6 +231,8 @@ function renderBoard() {
       els.board.appendChild(cell);
     }
   }
+  ensurePathResizeObserver();
+  requestAnimationFrame(() => updatePathLine());
 }
 
 function updatePathUI() {
@@ -169,6 +249,7 @@ function updatePathUI() {
   });
   const w = path.length ? pathToWord(board, path) : "";
   els.currentWord.textContent = w ? w.toUpperCase() : "—";
+  requestAnimationFrame(() => updatePathLine());
 }
 
 function tileFromPoint(clientX, clientY) {

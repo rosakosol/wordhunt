@@ -60,7 +60,10 @@
         </div>
 
         <div class="board-wrap">
-          <div class="board" id="board" role="application" aria-label="Letter grid"></div>
+          <div class="board-stack">
+            <div class="board" id="board" role="application" aria-label="Letter grid"></div>
+            <svg class="board-path" id="board-path" aria-hidden="true"></svg>
+          </div>
         </div>
 
         <p class="help">Drag across touching letters (including diagonals). Release to submit. Drag back one step to undo.</p>
