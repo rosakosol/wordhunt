@@ -16,7 +16,7 @@ const BOGGLE_DICE = [
   ["E", "H", "R", "T", "V", "W"],
   ["E", "I", "O", "S", "S", "S"],
   ["E", "L", "R", "T", "T", "Y"],
-  ["H", "I", "M", "N", "U", "QU"],
+  ["H", "I", "M", "N", "U", "Q"],
   ["H", "L", "N", "N", "R", "Z"],
 ];
 
@@ -40,7 +40,7 @@ function shuffle(array) {
   return a;
 }
 
-/** 4x4 of { face: string for UI, piece: string for word (e.g. "qu") } */
+/** 4x4 of { face, piece }: one letter each (display + word fragment). */
 function rollBoard() {
   const dice = shuffle(BOGGLE_DICE);
   const rows = [];
@@ -51,11 +51,7 @@ function rollBoard() {
       const die = dice[i++];
       const face = die[Math.floor(Math.random() * die.length)];
       const upper = face.toUpperCase();
-      if (upper === "QU") {
-        row.push({ face: "Qu", piece: "qu" });
-      } else {
-        row.push({ face: upper, piece: upper.toLowerCase() });
-      }
+      row.push({ face: upper, piece: upper.toLowerCase() });
     }
     rows.push(row);
   }
@@ -223,9 +219,7 @@ function renderBoard() {
       cell.className = "tile";
       cell.dataset.r = String(r);
       cell.dataset.c = String(c);
-      const { face, piece } = board[r][c];
-      cell.textContent = face;
-      cell.dataset.len = String(piece.length);
+      cell.textContent = board[r][c].face;
       cell.addEventListener("pointerdown", onTilePointerDown);
       cell.addEventListener("pointerenter", onTilePointerEnter);
       els.board.appendChild(cell);
