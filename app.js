@@ -24,11 +24,10 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 
 const MIN_WORD_LEN = 3;
 
-/** Boggle-style points by word length */
+/** Points by word length: 3→100, 4→400, 5→800; same curve continues (50n² − 50n − 200). */
 function scoreForWord(len) {
   if (len < MIN_WORD_LEN) return 0;
-  const table = { 3: 1, 4: 1, 5: 2, 6: 3, 7: 5 };
-  return table[len] ?? 11;
+  return 50 * len * len - 50 * len - 200;
 }
 
 function shuffle(array) {
