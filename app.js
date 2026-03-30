@@ -109,7 +109,7 @@ let timerId = null;
 let secondsLeft = 0;
 
 const MIN_ROUND_MIN = 1;
-const MAX_ROUND_MIN = 30;
+const MAX_ROUND_MIN = 5;
 
 function formatTime(sec) {
   const m = Math.floor(sec / 60);
