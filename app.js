@@ -160,11 +160,13 @@ const els = {
   modalLeaderboard: document.getElementById("modal-leaderboard"),
   regUsername: document.getElementById("reg-username"),
   regPassword: document.getElementById("reg-password"),
+  btnRegTogglePassword: document.getElementById("btn-reg-toggle-password"),
   regMsg: document.getElementById("reg-msg"),
   btnRegisterSubmit: document.getElementById("btn-register-submit"),
   btnRegisterCancel: document.getElementById("btn-register-cancel"),
   loginUsername: document.getElementById("login-username"),
   loginPassword: document.getElementById("login-password"),
+  btnLoginTogglePassword: document.getElementById("btn-login-toggle-password"),
   loginMsg: document.getElementById("login-msg"),
   btnLoginSubmit: document.getElementById("btn-login-submit"),
   btnLoginCancel: document.getElementById("btn-login-cancel"),
@@ -1411,19 +1413,51 @@ els.btnMpDone.addEventListener("click", () => backToMenu());
 loadStoredAuth();
 updateAuthBar();
 
+function setPasswordRevealed(input, toggleBtn, revealed) {
+  if (!input) return;
+  input.type = revealed ? "text" : "password";
+  if (toggleBtn) {
+    toggleBtn.setAttribute("aria-pressed", revealed ? "true" : "false");
+    toggleBtn.setAttribute("aria-label", revealed ? "Hide password" : "Show password");
+  }
+}
+
+function resetRegisterPasswordVisibility() {
+  setPasswordRevealed(els.regPassword, els.btnRegTogglePassword, false);
+}
+
+function resetLoginPasswordVisibility() {
+  setPasswordRevealed(els.loginPassword, els.btnLoginTogglePassword, false);
+}
+
+els.btnRegTogglePassword?.addEventListener("click", () => {
+  const reveal = els.regPassword?.type === "password";
+  setPasswordRevealed(els.regPassword, els.btnRegTogglePassword, reveal);
+});
+
+els.btnLoginTogglePassword?.addEventListener("click", () => {
+  const reveal = els.loginPassword?.type === "password";
+  setPasswordRevealed(els.loginPassword, els.btnLoginTogglePassword, reveal);
+});
+
 for (const modal of [els.modalRegister, els.modalLogin, els.modalLeaderboard]) {
   modal?.addEventListener("click", (e) => {
-    if (e.target === modal) modal.hidden = true;
+    if (e.target !== modal) return;
+    modal.hidden = true;
+    if (modal === els.modalRegister) resetRegisterPasswordVisibility();
+    if (modal === els.modalLogin) resetLoginPasswordVisibility();
   });
 }
 
 els.btnOpenRegister?.addEventListener("click", () => {
   if (els.regMsg) els.regMsg.textContent = "";
+  resetRegisterPasswordVisibility();
   if (els.modalRegister) els.modalRegister.hidden = false;
 });
 
 els.btnOpenLogin?.addEventListener("click", () => {
   if (els.loginMsg) els.loginMsg.textContent = "";
+  resetLoginPasswordVisibility();
   if (els.modalLogin) els.modalLogin.hidden = false;
 });
 
@@ -1434,30 +1468,58 @@ els.btnLbClose?.addEventListener("click", () => {
 });
 
 els.btnRegisterCancel?.addEventListener("click", () => {
+  resetRegisterPasswordVisibility();
   if (els.modalRegister) els.modalRegister.hidden = true;
 });
 
 els.btnLoginCancel?.addEventListener("click", () => {
+  resetLoginPasswordVisibility();
   if (els.modalLogin) els.modalLogin.hidden = true;
 });
+
+function setAuthFormBusy(kind, busy) {
+  const isReg = kind === "register";
+  const btn = isReg ? els.btnRegisterSubmit : els.btnLoginSubmit;
+  const cancel = isReg ? els.btnRegisterCancel : els.btnLoginCancel;
+  const username = isReg ? els.regUsername : els.loginUsername;
+  const password = isReg ? els.regPassword : els.loginPassword;
+  const toggle = isReg ? els.btnRegTogglePassword : els.btnLoginTogglePassword;
+  if (btn) {
+    btn.classList.toggle("btn--loading", busy);
+    btn.disabled = busy;
+    btn.setAttribute("aria-busy", busy ? "true" : "false");
+  }
+  if (cancel) cancel.disabled = busy;
+  if (username) username.disabled = busy;
+  if (password) password.disabled = busy;
+  if (toggle) toggle.disabled = busy;
+}
 
 els.btnRegisterSubmit?.addEventListener("click", async () => {
   if (!els.regMsg || !els.regUsername || !els.regPassword) return;
   els.regMsg.textContent = "";
   const username = els.regUsername.value.trim();
   const password = els.regPassword.value;
-  const { ok, data, status } = await authPost("register", { username, password });
-  if (!ok) {
-    els.regMsg.textContent =
-      data.message ||
-      (status === 503 ? "Server misconfiguration: add Redis URL/token to .env.local or Vercel env." : "") ||
-      data.error ||
-      "Could not register.";
-    return;
+  setAuthFormBusy("register", true);
+  try {
+    const { ok, data, status } = await authPost("register", { username, password });
+    if (!ok) {
+      els.regMsg.textContent =
+        data.message ||
+        (status === 503 ? "Server misconfiguration: add Redis URL/token to .env.local or Vercel env." : "") ||
+        data.error ||
+        "Could not register.";
+      return;
+    }
+    const displayName = String(data.username || username);
+    applyAuthResponse(data);
+    window.alert(`Registration successful! You are signed in as ${displayName}.`);
+    if (els.modalRegister) els.modalRegister.hidden = true;
+    els.regPassword.value = "";
+    resetRegisterPasswordVisibility();
+  } finally {
+    setAuthFormBusy("register", false);
   }
-  applyAuthResponse(data);
-  if (els.modalRegister) els.modalRegister.hidden = true;
-  els.regPassword.value = "";
 });
 
 els.btnLoginSubmit?.addEventListener("click", async () => {
@@ -1465,18 +1527,26 @@ els.btnLoginSubmit?.addEventListener("click", async () => {
   els.loginMsg.textContent = "";
   const username = els.loginUsername.value.trim();
   const password = els.loginPassword.value;
-  const { ok, data, status } = await authPost("login", { username, password });
-  if (!ok) {
-    els.loginMsg.textContent =
-      data.message ||
-      (status === 503 ? "Server misconfiguration (see API message in devtools)." : "") ||
-      data.error ||
-      "Could not log in.";
-    return;
+  setAuthFormBusy("login", true);
+  try {
+    const { ok, data, status } = await authPost("login", { username, password });
+    if (!ok) {
+      els.loginMsg.textContent =
+        data.message ||
+        (status === 503 ? "Server misconfiguration (see API message in devtools)." : "") ||
+        data.error ||
+        "Could not log in.";
+      return;
+    }
+    const displayName = String(data.username || username);
+    applyAuthResponse(data);
+    window.alert(`Login successful! Welcome back, ${displayName}.`);
+    if (els.modalLogin) els.modalLogin.hidden = true;
+    els.loginPassword.value = "";
+    resetLoginPasswordVisibility();
+  } finally {
+    setAuthFormBusy("login", false);
   }
-  applyAuthResponse(data);
-  if (els.modalLogin) els.modalLogin.hidden = true;
-  els.loginPassword.value = "";
 });
 
 els.btnLogout?.addEventListener("click", () => clearAuth());

@@ -224,6 +224,61 @@ body {
   border-color: var(--accent);
 }
 
+.modal-field--password .password-input-wrap {
+  position: relative;
+  display: block;
+}
+
+.modal-field--password .password-input-wrap input {
+  width: 100%;
+  padding-right: 2.65rem;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 0.35rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+
+.password-toggle:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.password-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.password-toggle__icon {
+  display: block;
+}
+
+.password-toggle__icon--hide {
+  display: none;
+}
+
+.password-toggle[aria-pressed="true"] .password-toggle__icon--show {
+  display: none;
+}
+
+.password-toggle[aria-pressed="true"] .password-toggle__icon--hide {
+  display: block;
+}
+
 .auth-msg {
   margin: 0 0 0.75rem;
   min-height: 1.25em;
@@ -504,6 +559,52 @@ body {
 
 .btn.primary:hover {
   filter: brightness(1.06);
+}
+
+.modal-card--form .btn.primary {
+  position: relative;
+  min-height: 3.1rem;
+}
+
+.btn.primary .btn-label {
+  display: inline-block;
+}
+
+.btn.primary .btn-spinner {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  box-sizing: border-box;
+  width: 1.35rem;
+  height: 1.35rem;
+  margin: 0;
+  border: 2.5px solid rgba(6, 32, 21, 0.22);
+  border-top-color: #062015;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  display: none;
+}
+
+.btn.primary.btn--loading {
+  cursor: wait;
+}
+
+.btn.primary.btn--loading .btn-spinner {
+  display: block;
+  animation: auth-btn-spin 0.65s linear infinite;
+}
+
+.btn.primary.btn--loading .btn-label {
+  visibility: hidden;
+}
+
+@keyframes auth-btn-spin {
+  from {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
 }
 
 .btn.ghost {
