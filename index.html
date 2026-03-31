@@ -17,6 +17,16 @@
       <header class="header">
         <h1>Word Hunt</h1>
         <p class="tagline">Connect adjacent letters · Longer words score more</p>
+        <div class="auth-bar" id="auth-bar">
+          <p class="auth-summary" id="auth-summary" aria-live="polite"></p>
+          <div class="auth-actions" id="auth-actions">
+            <button type="button" class="btn-link" id="btn-open-register">Register</button>
+            <span class="auth-dot" aria-hidden="true">·</span>
+            <button type="button" class="btn-link" id="btn-open-login">Log in</button>
+            <span class="auth-dot" aria-hidden="true">·</span>
+            <button type="button" class="btn-link" id="btn-open-lb">Leaderboard</button>
+          </div>
+        </div>
       </header>
 
       <section class="setup" id="setup">
@@ -123,6 +133,68 @@
           <p class="modal-score" id="mp-result-body"></p>
           <p class="modal-words" id="mp-result-scores"></p>
           <button type="button" class="btn primary" id="btn-mp-done">Back to menu</button>
+        </div>
+      </div>
+
+      <div class="modal" id="modal-register" hidden>
+        <div class="modal-card modal-card--form">
+          <h2>Register</h2>
+          <p class="auth-form-hint">3–20 characters: letters, numbers, or _. Password at least 8 characters.</p>
+          <label class="modal-field">
+            <span class="field-label">Username</span>
+            <input type="text" id="reg-username" autocomplete="username" maxlength="20" />
+          </label>
+          <label class="modal-field">
+            <span class="field-label">Password</span>
+            <input type="password" id="reg-password" autocomplete="new-password" />
+          </label>
+          <p class="auth-msg" id="reg-msg" role="alert"></p>
+          <button type="button" class="btn primary" id="btn-register-submit">Create account</button>
+          <button type="button" class="btn ghost" id="btn-register-cancel">Cancel</button>
+        </div>
+      </div>
+
+      <div class="modal" id="modal-login" hidden>
+        <div class="modal-card modal-card--form">
+          <h2>Log in</h2>
+          <div id="login-signed-in" hidden>
+            <p class="auth-form-hint" id="login-signed-in-msg"></p>
+            <button type="button" class="btn primary" id="btn-login-logout">Log out</button>
+          </div>
+          <div id="login-form">
+            <label class="modal-field">
+              <span class="field-label">Username</span>
+              <input type="text" id="login-username" autocomplete="username" maxlength="20" />
+            </label>
+            <label class="modal-field">
+              <span class="field-label">Password</span>
+              <input type="password" id="login-password" autocomplete="current-password" />
+            </label>
+            <p class="auth-msg" id="login-msg" role="alert"></p>
+            <button type="button" class="btn primary" id="btn-login-submit">Log in</button>
+          </div>
+          <button type="button" class="btn ghost" id="btn-login-cancel">Close</button>
+        </div>
+      </div>
+
+      <div class="modal" id="modal-leaderboard" hidden>
+        <div class="modal-card modal-card--wide">
+          <h2>Leaderboard</h2>
+          <p class="lb-footnote" id="lb-you">Sign in to track your total score across rounds.</p>
+          <div class="lb-table-wrap">
+            <table class="lb-table" aria-label="Top players by total points">
+              <thead>
+                <tr>
+                  <th scope="col">#</th>
+                  <th scope="col">Player</th>
+                  <th scope="col">Pts</th>
+                </tr>
+              </thead>
+              <tbody id="lb-tbody"></tbody>
+            </table>
+          </div>
+          <p class="auth-msg" id="lb-msg" role="status"></p>
+          <button type="button" class="btn primary" id="btn-lb-close">Close</button>
         </div>
       </div>
     </div>

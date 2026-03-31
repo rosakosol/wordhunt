@@ -1,12 +1,5 @@
-import { Redis } from "@upstash/redis";
 import { randomBytes } from "node:crypto";
-
-function getRedis() {
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (!url || !token) return null;
-  return new Redis({ url, token });
-}
+import { getRedis } from "./redis-client.js";
 
 function roomKey(id) {
   return `wh:room:${id}`;

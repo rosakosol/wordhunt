@@ -25,6 +25,10 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 const MIN_WORD_LEN = 3;
 
 const API_MP = "/api/mp";
+const API_AUTH = "/api/auth";
+
+const LS_AUTH_TOKEN = "wh_auth_token";
+const LS_AUTH_USER = "wh_auth_user";
 
 const MIN_ROUND_MIN = 1;
 const MAX_ROUND_MIN = 5;
@@ -41,6 +45,13 @@ const mp = {
 let mpPollTimer = null;
 let mpResultPollTimer = null;
 let hostLobbyPollTimer = null;
+
+/** @type {string | null} */
+let authToken = null;
+let authUsername = "";
+let authTotal = 0;
+/** @type {number | null} */
+let authRank = null;
 
 /** Points by word length: 3→100, 4→400, 5→800; same curve continues (50n² − 50n − 200). */
 function scoreForWord(len) {
@@ -131,6 +142,31 @@ const els = {
   btnMpBegin: document.getElementById("btn-mp-begin"),
   mpGuestMsg: document.getElementById("mp-guest-msg"),
   mpRolePill: document.getElementById("mp-role-pill"),
+  authSummary: document.getElementById("auth-summary"),
+  btnOpenRegister: document.getElementById("btn-open-register"),
+  btnOpenLogin: document.getElementById("btn-open-login"),
+  btnOpenLb: document.getElementById("btn-open-lb"),
+  loginSignedIn: document.getElementById("login-signed-in"),
+  loginSignedInMsg: document.getElementById("login-signed-in-msg"),
+  loginFormWrap: document.getElementById("login-form"),
+  btnLoginLogout: document.getElementById("btn-login-logout"),
+  modalRegister: document.getElementById("modal-register"),
+  modalLogin: document.getElementById("modal-login"),
+  modalLeaderboard: document.getElementById("modal-leaderboard"),
+  regUsername: document.getElementById("reg-username"),
+  regPassword: document.getElementById("reg-password"),
+  regMsg: document.getElementById("reg-msg"),
+  btnRegisterSubmit: document.getElementById("btn-register-submit"),
+  btnRegisterCancel: document.getElementById("btn-register-cancel"),
+  loginUsername: document.getElementById("login-username"),
+  loginPassword: document.getElementById("login-password"),
+  loginMsg: document.getElementById("login-msg"),
+  btnLoginSubmit: document.getElementById("btn-login-submit"),
+  btnLoginCancel: document.getElementById("btn-login-cancel"),
+  lbTbody: document.getElementById("lb-tbody"),
+  lbYou: document.getElementById("lb-you"),
+  lbMsg: document.getElementById("lb-msg"),
+  btnLbClose: document.getElementById("btn-lb-close"),
 };
 
 let board = [];
@@ -263,6 +299,217 @@ async function mpPost(action, body) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.message || data.error || res.statusText);
   return data;
+}
+
+function loadStoredAuth() {
+  try {
+    authToken = localStorage.getItem(LS_AUTH_TOKEN);
+    authUsername = localStorage.getItem(LS_AUTH_USER) || "";
+  } catch {
+    authToken = null;
+    authUsername = "";
+  }
+  if (!authToken) {
+    authToken = null;
+    authUsername = "";
+  }
+}
+
+function applyAuthResponse(data) {
+  if (!data?.token) return;
+  authToken = data.token;
+  authUsername = String(data.username || "");
+  authTotal = Number(data.totalPoints) || 0;
+  authRank = data.rank != null ? Number(data.rank) : null;
+  try {
+    localStorage.setItem(LS_AUTH_TOKEN, authToken);
+    localStorage.setItem(LS_AUTH_USER, authUsername);
+  } catch {
+    /* ignore */
+  }
+  updateAuthBar();
+}
+
+function clearAuth() {
+  authToken = null;
+  authUsername = "";
+  authTotal = 0;
+  authRank = null;
+  try {
+    localStorage.removeItem(LS_AUTH_TOKEN);
+    localStorage.removeItem(LS_AUTH_USER);
+  } catch {
+    /* ignore */
+  }
+  updateAuthBar();
+}
+
+function updateAuthBar() {
+  if (!els.authSummary) return;
+  if (!authToken) {
+    els.authSummary.textContent = "";
+  } else {
+    const pts = Number(authTotal) || 0;
+    const r = authRank != null && Number.isFinite(authRank) ? ` · #${authRank} on board` : "";
+    els.authSummary.textContent = `${authUsername} — ${pts} pts${r}`;
+  }
+}
+
+function syncLoginModalLayout() {
+  const signedIn = !!authToken;
+  if (els.loginSignedIn) els.loginSignedIn.hidden = !signedIn;
+  if (els.loginFormWrap) els.loginFormWrap.hidden = signedIn;
+  if (els.btnLoginSubmit) els.btnLoginSubmit.hidden = signedIn;
+  if (signedIn && els.loginSignedInMsg) {
+    const pts = Number(authTotal) || 0;
+    els.loginSignedInMsg.textContent = `You’re signed in as ${authUsername} (${pts} total pts). Log out to switch accounts.`;
+  }
+}
+
+async function authPost(action, payload, bearer) {
+  const u = new URL(API_AUTH, window.location.origin);
+  const headers = { "Content-Type": "application/json" };
+  if (bearer) headers.Authorization = `Bearer ${bearer}`;
+  const res = await fetch(u.toString(), {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ action, ...payload }),
+  });
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, data, status: res.status };
+}
+
+async function refreshAuthMe() {
+  if (!authToken) return;
+  const u = new URL(API_AUTH, window.location.origin);
+  u.searchParams.set("action", "me");
+  try {
+    const res = await fetch(u.toString(), { headers: { Authorization: `Bearer ${authToken}` } });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      clearAuth();
+      return;
+    }
+    authUsername = String(data.username || authUsername);
+    authTotal = Number(data.totalPoints) || 0;
+    authRank = data.rank != null ? Number(data.rank) : null;
+    try {
+      localStorage.setItem(LS_AUTH_USER, authUsername);
+    } catch {
+      /* ignore */
+    }
+    updateAuthBar();
+  } catch {
+    /* keep token; offline */
+  }
+}
+
+async function submitLeaderboardDelta(delta) {
+  if (!authToken) return;
+  const pts = Math.round(Number(delta));
+  if (!Number.isFinite(pts) || pts <= 0) return;
+  const safe = Math.min(pts, 1e9);
+  try {
+    const { ok, data } = await authPost("addScore", { points: safe }, authToken);
+    if (ok && typeof data.totalPoints === "number") {
+      authTotal = data.totalPoints;
+      authRank = data.rank != null ? Number(data.rank) : authRank;
+      updateAuthBar();
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Submit this device user’s multiplayer round score (call only when the match just finished live). */
+function submitMpLeaderboardFromState(st) {
+  const my = mp.role === "host" ? (st.hostScore ?? 0) : (st.guestScore ?? 0);
+  void submitLeaderboardDelta(my);
+}
+
+async function openLeaderboardModal() {
+  if (!els.modalLeaderboard || !els.lbTbody) return;
+  els.modalLeaderboard.hidden = false;
+  els.lbTbody.replaceChildren();
+  els.lbMsg.textContent = "Loading…";
+  els.lbMsg.classList.remove("lb-err");
+  if (els.lbYou) {
+    els.lbYou.textContent = authToken
+      ? "Your total includes every solo and multiplayer round you finish while logged in on this device."
+      : "Sign in to track your total score across rounds.";
+  }
+
+  const lbUrl = new URL(API_AUTH, window.location.origin);
+  lbUrl.searchParams.set("action", "leaderboard");
+  const meUrl = new URL(API_AUTH, window.location.origin);
+  meUrl.searchParams.set("action", "me");
+
+  try {
+    const lbPromise = fetch(lbUrl.toString());
+    const mePromise = authToken
+      ? fetch(meUrl.toString(), { headers: { Authorization: `Bearer ${authToken}` } })
+      : Promise.resolve(null);
+    const [lbRes, meRes] = await Promise.all([lbPromise, mePromise]);
+
+    const lbData = await lbRes.json().catch(() => ({}));
+    if (!lbRes.ok) {
+      els.lbMsg.textContent = lbData.message || lbData.error || "Could not load leaderboard.";
+      els.lbMsg.classList.add("lb-err");
+      return;
+    }
+
+    /** @type {{ rank: number, username: string, points: number }[]} */
+    const entries = Array.isArray(lbData.entries) ? lbData.entries : [];
+    const meName = authUsername ? authUsername.toLowerCase() : "";
+    let meRow = null;
+    if (meRes && meRes.ok) {
+      const me = await meRes.json().catch(() => ({}));
+      if (typeof me.totalPoints === "number") {
+        authTotal = me.totalPoints;
+        authRank = me.rank != null ? Number(me.rank) : authRank;
+        updateAuthBar();
+      }
+      if (els.lbYou && me.username) {
+        const rp = me.rank != null ? `#${me.rank}` : "—";
+        els.lbYou.textContent = `You are ${rp} with ${me.totalPoints ?? 0} total pts (all rounds on this account).`;
+      }
+    }
+
+    entries.forEach((row) => {
+      const tr = document.createElement("tr");
+      const u = String(row.username || "");
+      if (meName && u.toLowerCase() === meName) {
+        tr.classList.add("lb-you");
+        meRow = tr;
+      }
+      const tdR = document.createElement("td");
+      tdR.textContent = String(row.rank ?? "");
+      const tdU = document.createElement("td");
+      tdU.textContent = u;
+      const tdP = document.createElement("td");
+      tdP.textContent = String(row.points ?? 0);
+      tr.append(tdR, tdU, tdP);
+      els.lbTbody.appendChild(tr);
+    });
+
+    if (entries.length === 0) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 3;
+      td.textContent = "No scores yet. Play a round while logged in!";
+      tr.appendChild(td);
+      els.lbTbody.appendChild(tr);
+    }
+
+    els.lbMsg.textContent = "";
+    if (authToken && meName && !meRow && entries.length > 0) {
+      els.lbMsg.textContent =
+        "You’re not in the top 100 yet — your rank and total are shown above.";
+    }
+  } catch {
+    els.lbMsg.textContent = "Network error loading leaderboard.";
+    els.lbMsg.classList.add("lb-err");
+  }
 }
 
 function parseMpUrl() {
@@ -663,10 +910,9 @@ async function submitMpScoreAndFinish() {
       wordCount: foundWords.size,
     });
     if (sub.bothDone) {
-      showMpResultFromState({
-        hostScore: sub.hostScore,
-        guestScore: sub.guestScore,
-      });
+      const fin = { hostScore: sub.hostScore, guestScore: sub.guestScore };
+      showMpResultFromState(fin);
+      submitMpLeaderboardFromState(fin);
       els.modalMpWait.hidden = true;
     } else {
       els.modalMpWait.hidden = false;
@@ -676,10 +922,9 @@ async function submitMpScoreAndFinish() {
           if (st.hostSubmitted && st.guestSubmitted) {
             clearInterval(mpResultPollTimer);
             mpResultPollTimer = null;
-            showMpResultFromState({
-              hostScore: st.hostScore,
-              guestScore: st.guestScore,
-            });
+            const fin = { hostScore: st.hostScore, guestScore: st.guestScore };
+            showMpResultFromState(fin);
+            submitMpLeaderboardFromState(fin);
             els.modalMpWait.hidden = true;
           }
         } catch {
@@ -718,6 +963,7 @@ function endRound() {
     els.modalMpWait.hidden = true;
     els.modalMpWait.textContent = "Sending score… waiting for opponent to finish.";
     els.modalEnd.hidden = false;
+    if (authToken && score > 0) void submitLeaderboardDelta(score);
   }
 }
 
@@ -989,6 +1235,83 @@ els.btnPlayAgain.addEventListener("click", () => {
 });
 els.btnMpDone.addEventListener("click", () => backToMenu());
 
+loadStoredAuth();
+updateAuthBar();
+
+for (const modal of [els.modalRegister, els.modalLogin, els.modalLeaderboard]) {
+  modal?.addEventListener("click", (e) => {
+    if (e.target === modal) modal.hidden = true;
+  });
+}
+
+els.btnOpenRegister?.addEventListener("click", () => {
+  if (els.regMsg) els.regMsg.textContent = "";
+  if (els.modalRegister) els.modalRegister.hidden = false;
+});
+
+els.btnOpenLogin?.addEventListener("click", () => {
+  if (els.loginMsg) els.loginMsg.textContent = "";
+  syncLoginModalLayout();
+  if (els.modalLogin) els.modalLogin.hidden = false;
+});
+
+els.btnOpenLb?.addEventListener("click", () => void openLeaderboardModal());
+
+els.btnLbClose?.addEventListener("click", () => {
+  if (els.modalLeaderboard) els.modalLeaderboard.hidden = true;
+});
+
+els.btnRegisterCancel?.addEventListener("click", () => {
+  if (els.modalRegister) els.modalRegister.hidden = true;
+});
+
+els.btnLoginCancel?.addEventListener("click", () => {
+  if (els.modalLogin) els.modalLogin.hidden = true;
+});
+
+els.btnRegisterSubmit?.addEventListener("click", async () => {
+  if (!els.regMsg || !els.regUsername || !els.regPassword) return;
+  els.regMsg.textContent = "";
+  const username = els.regUsername.value.trim();
+  const password = els.regPassword.value;
+  const { ok, data, status } = await authPost("register", { username, password });
+  if (!ok) {
+    els.regMsg.textContent =
+      data.message ||
+      (status === 503 ? "Server misconfiguration: add Redis URL/token to .env.local or Vercel env." : "") ||
+      data.error ||
+      "Could not register.";
+    return;
+  }
+  applyAuthResponse(data);
+  if (els.modalRegister) els.modalRegister.hidden = true;
+  els.regPassword.value = "";
+});
+
+els.btnLoginSubmit?.addEventListener("click", async () => {
+  if (!els.loginMsg || !els.loginUsername || !els.loginPassword) return;
+  els.loginMsg.textContent = "";
+  const username = els.loginUsername.value.trim();
+  const password = els.loginPassword.value;
+  const { ok, data, status } = await authPost("login", { username, password });
+  if (!ok) {
+    els.loginMsg.textContent =
+      data.message ||
+      (status === 503 ? "Server misconfiguration (see API message in devtools)." : "") ||
+      data.error ||
+      "Could not log in.";
+    return;
+  }
+  applyAuthResponse(data);
+  if (els.modalLogin) els.modalLogin.hidden = true;
+  els.loginPassword.value = "";
+});
+
+els.btnLoginLogout?.addEventListener("click", () => {
+  clearAuth();
+  syncLoginModalLayout();
+});
+
 window.addEventListener("pointermove", onWindowPointerMove);
 window.addEventListener("pointerup", onGlobalPointerUp);
 window.addEventListener("pointercancel", onGlobalPointerUp);
@@ -997,6 +1320,7 @@ syncDurationControls(true);
 
 (async () => {
   await loadDictionary();
+  await refreshAuthMe();
   const q = parseMpUrl();
   if (q?.role === "host") await resumeHostFromUrl();
   else if (q?.role === "guest") await resumeGuestFromUrl();
