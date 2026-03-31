@@ -133,6 +133,23 @@ body {
   color: var(--accent);
 }
 
+.mp-opponent-status {
+  margin: 0.65rem 0 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.35;
+}
+
+.mp-opponent-status.mp-opponent-waiting {
+  color: var(--muted);
+}
+
+.mp-opponent-status.mp-opponent-joined {
+  color: var(--accent);
+}
+
+
 .mp-role-pill {
   margin: 0 0 0.65rem;
   text-align: center;
@@ -515,4 +532,8 @@ body {
 
 .modal-card .btn {
   margin-top: 0.5rem;
+}
+
+.hint {
+  padding-bottom: 1rem;
 }

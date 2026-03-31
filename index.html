@@ -37,7 +37,6 @@
               <span class="unit">min</span>
             </div>
           </div>
-          <p class="hint">Drag the slider or type minutes (1–5). Used for solo and multiplayer.</p>
         </label>
 
         <div class="mode-tabs" role="tablist" aria-label="Game mode">
@@ -50,19 +49,18 @@
         </div>
 
         <div id="multi-panel" hidden>
-          <p class="hint multi-intro">
-            Same board and clock for both players. Highest score wins. Requires free
-          </p>
           <button type="button" class="btn primary" id="btn-create-mp">Create room &amp; get guest link</button>
           <div class="mp-host-lobby field" id="mp-host-lobby" hidden>
-            <span class="field-label">Guest link — send to your opponent</span>
+            <span class="field-label">Guest link — send to your opponent!</span>
             <div class="copy-row">
               <input type="text" readonly id="mp-guest-url" class="copy-input" />
               <button type="button" class="btn secondary" id="btn-copy-guest">Copy</button>
             </div>
+            <p class="mp-opponent-status mp-opponent-waiting" id="mp-host-opponent-status" aria-live="polite">
+              Waiting for opponent to open the guest link…
+            </p>
             <p class="hint">
-              Keep this tab open. Your link is in the address bar (host). When your friend is ready, start the match — both
-              timers run from the same end time.
+              Keep this tab open. Your link is in the address bar (host). When your friend is ready, press Begin match.
             </p>
             <button type="button" class="btn primary" id="btn-mp-begin">Begin match</button>
           </div>

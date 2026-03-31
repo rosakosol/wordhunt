@@ -1,5 +1,5 @@
-const { Redis } = require("@upstash/redis");
-const { randomBytes } = require("crypto");
+import { Redis } from "@upstash/redis";
+import { randomBytes } from "node:crypto";
 
 function getRedis() {
   const url = process.env.UPSTASH_REDIS_REST_URL;
@@ -52,7 +52,7 @@ function getAction(req, body) {
   return "";
 }
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -105,6 +105,7 @@ module.exports = async function handler(req, res) {
         guestWords: 0,
         hostSubmitted: false,
         guestSubmitted: false,
+        guestJoined: false,
       };
       await r.set(roomKey(roomId), JSON.stringify(room), { ex: 86400 });
       res.status(200).json({ roomId, hostSecret, guestSecret });
@@ -158,6 +159,12 @@ module.exports = async function handler(req, res) {
         res.status(403).json({ error: "forbidden" });
         return;
       }
+
+      if (okGuest && !room.endsAt && !room.guestJoined) {
+        room.guestJoined = true;
+        await r.set(roomKey(roomId), JSON.stringify(room), { ex: 86400 });
+      }
+
       res.status(200).json({
         endsAt: room.endsAt,
         board: room.board,
@@ -168,6 +175,7 @@ module.exports = async function handler(req, res) {
         guestSubmitted: room.guestSubmitted,
         hostWords: room.hostWords,
         guestWords: room.guestWords,
+        guestJoined: !!room.guestJoined,
         serverNow: Date.now(),
       });
       return;

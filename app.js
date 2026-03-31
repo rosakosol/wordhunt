@@ -40,6 +40,7 @@ const mp = {
 
 let mpPollTimer = null;
 let mpResultPollTimer = null;
+let hostLobbyPollTimer = null;
 
 /** Points by word length: 3→100, 4→400, 5→800; same curve continues (50n² − 50n − 200). */
 function scoreForWord(len) {
@@ -123,6 +124,7 @@ const els = {
   multiPanel: document.getElementById("multi-panel"),
   btnCreateMp: document.getElementById("btn-create-mp"),
   mpHostLobby: document.getElementById("mp-host-lobby"),
+  mpHostOpponentStatus: document.getElementById("mp-host-opponent-status"),
   mpGuestWait: document.getElementById("mp-guest-wait"),
   mpGuestUrl: document.getElementById("mp-guest-url"),
   btnCopyGuest: document.getElementById("btn-copy-guest"),
@@ -177,6 +179,44 @@ function clearMpPollers() {
     clearInterval(mpResultPollTimer);
     mpResultPollTimer = null;
   }
+  if (hostLobbyPollTimer) {
+    clearInterval(hostLobbyPollTimer);
+    hostLobbyPollTimer = null;
+  }
+}
+
+function setHostOpponentJoinedUI(joined) {
+  const el = els.mpHostOpponentStatus;
+  if (!el) return;
+  el.classList.toggle("mp-opponent-waiting", !joined);
+  el.classList.toggle("mp-opponent-joined", joined);
+  el.textContent = joined
+    ? "Opponent has joined — start the match when you’re both ready."
+    : "Waiting for opponent to open the guest link…";
+}
+
+function resetHostOpponentStatusUI() {
+  setHostOpponentJoinedUI(false);
+}
+
+function startHostLobbyPolling() {
+  if (hostLobbyPollTimer) {
+    clearInterval(hostLobbyPollTimer);
+    hostLobbyPollTimer = null;
+  }
+  if (!mp.roomId || !mp.secret || mp.role !== "host") return;
+  hostLobbyPollTimer = setInterval(async () => {
+    try {
+      const st = await mpFetchState(mp.roomId, "host", mp.secret);
+      if (st.guestJoined) {
+        setHostOpponentJoinedUI(true);
+        clearInterval(hostLobbyPollTimer);
+        hostLobbyPollTimer = null;
+      }
+    } catch {
+      /* ignore */
+    }
+  }, 1200);
 }
 
 function mpSessionKey(roomId) {
@@ -738,8 +778,10 @@ async function createMultiplayerRoom() {
     mp.secret = data.hostSecret;
     setHostUrl(data.roomId, data.hostSecret);
     els.mpGuestUrl.value = guestUrl;
+    resetHostOpponentStatusUI();
     els.mpHostLobby.hidden = false;
     els.loadStatus.hidden = true;
+    startHostLobbyPolling();
   } catch (e) {
     els.loadStatus.hidden = false;
     els.loadStatus.textContent = e.message || String(e);
@@ -750,6 +792,10 @@ async function createMultiplayerRoom() {
 
 async function hostBeginMatch() {
   if (!mp.roomId || !mp.secret) return;
+  if (hostLobbyPollTimer) {
+    clearInterval(hostLobbyPollTimer);
+    hostLobbyPollTimer = null;
+  }
   els.btnMpBegin.disabled = true;
   els.loadStatus.hidden = false;
   els.loadStatus.textContent = "Starting match…";
@@ -829,6 +875,8 @@ async function resumeHostFromUrl() {
       enterMultiGameFromState(st);
       return;
     }
+    if (st.guestJoined) setHostOpponentJoinedUI(true);
+    else startHostLobbyPolling();
   } catch (e) {
     els.loadStatus.hidden = false;
     els.loadStatus.textContent = e.message || String(e);
@@ -873,6 +921,7 @@ function backToMenu() {
   history.replaceState(null, "", window.location.pathname);
   els.mpHostLobby.hidden = true;
   els.mpGuestWait.hidden = true;
+  resetHostOpponentStatusUI();
   setModeTab(true);
 }
 
