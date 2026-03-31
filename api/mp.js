@@ -108,6 +108,8 @@ export default async function handler(req, res) {
         endsAt: null,
         hostScore: null,
         guestScore: null,
+        hostLiveScore: null,
+        guestLiveScore: null,
         hostWords: 0,
         guestWords: 0,
         hostWordList: [],
@@ -180,6 +182,8 @@ export default async function handler(req, res) {
         durationMin: room.durationMin,
         hostScore: room.hostScore,
         guestScore: room.guestScore,
+        hostLiveScore: room.hostLiveScore ?? null,
+        guestLiveScore: room.guestLiveScore ?? null,
         hostSubmitted: room.hostSubmitted,
         guestSubmitted: room.guestSubmitted,
         hostWords: room.hostWords,
@@ -193,6 +197,49 @@ export default async function handler(req, res) {
         guestJoined: !!room.guestJoined,
         serverNow: Date.now(),
       });
+      return;
+    }
+
+    if (action === "liveScore" && req.method === "POST") {
+      const { roomId, role, secret, score: scoreVal } = body;
+      const raw = await r.get(roomKey(roomId));
+      const room = parseRoom(raw);
+      if (!room) {
+        res.status(404).json({ error: "not_found" });
+        return;
+      }
+      if (role === "host" && secret !== room.hostSecret) {
+        res.status(403).json({ error: "forbidden" });
+        return;
+      }
+      if (role === "guest" && secret !== room.guestSecret) {
+        res.status(403).json({ error: "forbidden" });
+        return;
+      }
+      if (!room.endsAt) {
+        res.status(400).json({ error: "match_not_started" });
+        return;
+      }
+      const s = Number(scoreVal);
+      if (!Number.isFinite(s) || s < 0 || s > 1e9) {
+        res.status(400).json({ error: "invalid_score" });
+        return;
+      }
+      if (role === "host") {
+        if (room.hostSubmitted) {
+          res.status(200).json({ ok: true });
+          return;
+        }
+        room.hostLiveScore = s;
+      } else {
+        if (room.guestSubmitted) {
+          res.status(200).json({ ok: true });
+          return;
+        }
+        room.guestLiveScore = s;
+      }
+      await r.set(roomKey(roomId), JSON.stringify(room), { ex: 86400 });
+      res.status(200).json({ ok: true });
       return;
     }
 
@@ -251,7 +298,7 @@ export default async function handler(req, res) {
 
     res.status(400).json({
       error: "unknown_action",
-      message: action ? `Unknown action: ${action}` : "Missing action. Use create, start, state, or submit.",
+      message: action ? `Unknown action: ${action}` : "Missing action. Use create, start, state, liveScore, or submit.",
     });
   } catch (e) {
     console.error(e);

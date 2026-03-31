@@ -51,6 +51,9 @@ const mp = {
 let mpPollTimer = null;
 let mpResultPollTimer = null;
 let hostLobbyPollTimer = null;
+let mpLiveScorePollTimer = null;
+/** @type {ReturnType<typeof setTimeout> | null} */
+let mpLivePushTimer = null;
 
 /** @type {string | null} */
 let authToken = null;
@@ -120,6 +123,8 @@ const els = {
   boardPath: document.getElementById("board-path"),
   timer: document.getElementById("timer"),
   score: document.getElementById("score"),
+  hudOpponentWrap: document.getElementById("hud-opponent-wrap"),
+  opponentScore: document.getElementById("opponent-score"),
   currentWord: document.getElementById("current-word"),
   foundList: document.getElementById("found-list"),
   foundCount: document.getElementById("found-count"),
@@ -404,6 +409,86 @@ function clearMpPollers() {
     clearInterval(hostLobbyPollTimer);
     hostLobbyPollTimer = null;
   }
+  if (mpLiveScorePollTimer) {
+    clearInterval(mpLiveScorePollTimer);
+    mpLiveScorePollTimer = null;
+  }
+  if (mpLivePushTimer) {
+    clearTimeout(mpLivePushTimer);
+    mpLivePushTimer = null;
+  }
+}
+
+function hideMpOpponentHud() {
+  if (els.hudOpponentWrap) els.hudOpponentWrap.hidden = true;
+  if (els.opponentScore) els.opponentScore.textContent = "—";
+}
+
+function updateOpponentScoreDisplay(value) {
+  if (!els.opponentScore) return;
+  els.opponentScore.textContent = value == null ? "—" : String(value);
+}
+
+/** @param {Record<string, unknown>} st */
+function applyOpponentScoreFromState(st) {
+  if (!mp.active || !st) return;
+  let v = null;
+  if (mp.role === "host") {
+    if (st.guestSubmitted) v = st.guestScore != null ? Number(st.guestScore) : 0;
+    else if (st.guestLiveScore != null) v = Number(st.guestLiveScore);
+  } else {
+    if (st.hostSubmitted) v = st.hostScore != null ? Number(st.hostScore) : 0;
+    else if (st.hostLiveScore != null) v = Number(st.hostLiveScore);
+  }
+  updateOpponentScoreDisplay(Number.isFinite(v) ? v : null);
+}
+
+function startMpLiveScorePolling() {
+  if (mpLiveScorePollTimer) {
+    clearInterval(mpLiveScorePollTimer);
+    mpLiveScorePollTimer = null;
+  }
+  if (!mp.active || !mp.roomId || !mp.secret || !mp.role) return;
+  mpLiveScorePollTimer = setInterval(async () => {
+    if (!mp.active || !mp.roomId || !mp.secret || !mp.role) return;
+    try {
+      const st = await mpFetchState(mp.roomId, mp.role, mp.secret);
+      applyOpponentScoreFromState(st);
+    } catch {
+      /* ignore */
+    }
+  }, 1100);
+}
+
+async function pushMpLiveScore() {
+  if (!mp.active || !mp.roomId || !mp.secret || !mp.role) return;
+  try {
+    await mpPost("liveScore", {
+      roomId: mp.roomId,
+      role: mp.role,
+      secret: mp.secret,
+      score,
+    });
+  } catch {
+    /* ignore */
+  }
+}
+
+function schedulePushMpLiveScore() {
+  if (!mp.active) return;
+  if (mpLivePushTimer) clearTimeout(mpLivePushTimer);
+  mpLivePushTimer = setTimeout(() => {
+    mpLivePushTimer = null;
+    void pushMpLiveScore();
+  }, 280);
+}
+
+function flushMpLiveScorePush() {
+  if (mpLivePushTimer) {
+    clearTimeout(mpLivePushTimer);
+    mpLivePushTimer = null;
+  }
+  void pushMpLiveScore();
 }
 
 function setHostOpponentJoinedUI(joined) {
@@ -1058,6 +1143,7 @@ function submitPath() {
   li.classList.add("new");
   els.foundList.prepend(li);
   els.foundCount.textContent = String(foundWords.size);
+  if (mp.active) schedulePushMpLiveScore();
 }
 
 function onGlobalPointerUp() {
@@ -1074,6 +1160,7 @@ function resetMpState() {
   mp.secret = null;
   mp.endsAt = null;
   clearMpPollers();
+  hideMpOpponentHud();
   els.mpRolePill.hidden = true;
 }
 
@@ -1110,6 +1197,11 @@ function enterMultiGameFromState(st) {
     endRound();
     return;
   }
+
+  if (els.hudOpponentWrap) els.hudOpponentWrap.hidden = false;
+  updateOpponentScoreDisplay(null);
+  startMpLiveScorePolling();
+  void mpFetchState(mp.roomId, mp.role, mp.secret).then(applyOpponentScoreFromState).catch(() => {});
 
   startGameTimer();
   void startGameMusic();
@@ -1170,6 +1262,11 @@ function showMpResultFromState(st) {
 
 async function submitMpScoreAndFinish() {
   if (!mp.active || !mp.roomId || !mp.secret || !mp.role) return;
+  if (mpLivePushTimer) {
+    clearTimeout(mpLivePushTimer);
+    mpLivePushTimer = null;
+  }
+  await pushMpLiveScore();
   try {
     const sub = await mpPost("submit", {
       roomId: mp.roomId,
@@ -1235,6 +1332,11 @@ function endRound() {
   });
 
   if (mp.active) {
+    if (mpLiveScorePollTimer) {
+      clearInterval(mpLiveScorePollTimer);
+      mpLiveScorePollTimer = null;
+    }
+    hideMpOpponentHud();
     els.modalMpWait.hidden = true;
     els.modalMpWait.textContent = "Sending score… waiting for opponent to finish.";
     els.modalEnd.hidden = false;
