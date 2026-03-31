@@ -24,6 +24,9 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 
 const MIN_WORD_LEN = 3;
 
+/** Optional loop: place `audio/bgm.mp3` next to the site; falls back to soft procedural hum. */
+const BGM_URL = new URL("audio/bgm.mp3", window.location.href).href;
+
 const API_MP = "/api/mp";
 const API_AUTH = "/api/auth";
 
@@ -127,7 +130,10 @@ const els = {
   modalMpResult: document.getElementById("modal-mp-result"),
   mpResultTitle: document.getElementById("mp-result-title"),
   mpResultBody: document.getElementById("mp-result-body"),
-  mpResultScores: document.getElementById("mp-result-scores"),
+  mpResultHostBox: document.getElementById("mp-result-host-box"),
+  mpResultGuestBox: document.getElementById("mp-result-guest-box"),
+  mpResultHostScore: document.getElementById("mp-result-host-score"),
+  mpResultGuestScore: document.getElementById("mp-result-guest-score"),
   btnMpDone: document.getElementById("btn-mp-done"),
   tabSolo: document.getElementById("tab-solo"),
   tabMulti: document.getElementById("tab-multi"),
@@ -179,6 +185,147 @@ let timerId = null;
 let secondsLeft = 0;
 /** @type {ResizeObserver | null} */
 let pathResizeObserver = null;
+
+/** @type {AudioContext | null} */
+let sfxAudioCtx = null;
+/** @type {{ html: HTMLAudioElement | null, proc: { o1: OscillatorNode; o2: OscillatorNode; g: GainNode } | null }} */
+let gameMusic = { html: null, proc: null };
+
+function getSfxContext() {
+  if (!sfxAudioCtx) {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    sfxAudioCtx = new Ctx();
+  }
+  return sfxAudioCtx;
+}
+
+async function resumeSfxContext() {
+  const ctx = getSfxContext();
+  if (!ctx) return;
+  if (ctx.state === "suspended") await ctx.resume();
+}
+
+function stopProceduralBgm() {
+  const p = gameMusic.proc;
+  if (!p) return;
+  try {
+    p.o1.stop();
+    p.o2.stop();
+  } catch {
+    /* already stopped */
+  }
+  gameMusic.proc = null;
+}
+
+function startProceduralBgm() {
+  if (gameMusic.proc || gameMusic.html) return;
+  const ctx = getSfxContext();
+  if (!ctx) return;
+  const g = ctx.createGain();
+  g.gain.value = 0.045;
+  const f = ctx.createBiquadFilter();
+  f.type = "lowpass";
+  f.frequency.value = 520;
+  f.Q.value = 0.7;
+  g.connect(f);
+  f.connect(ctx.destination);
+  const o1 = ctx.createOscillator();
+  const o2 = ctx.createOscillator();
+  o1.type = "triangle";
+  o2.type = "triangle";
+  o1.frequency.value = 130.81;
+  o2.frequency.value = 164.81;
+  o1.connect(g);
+  o2.connect(g);
+  o1.start();
+  o2.start();
+  gameMusic.proc = { o1, o2, g };
+}
+
+function stopGameMusic() {
+  if (gameMusic.html) {
+    gameMusic.html.pause();
+    gameMusic.html.removeAttribute("src");
+    gameMusic.html.load();
+    gameMusic.html = null;
+  }
+  stopProceduralBgm();
+}
+
+async function startGameMusic() {
+  if (gameMusic.html || gameMusic.proc) return;
+  await resumeSfxContext();
+  const a = new Audio();
+  a.loop = true;
+  a.volume = 0.22;
+  a.preload = "auto";
+  const canUseHtml = await new Promise((resolve) => {
+    const ok = () => resolve(true);
+    const bad = () => resolve(false);
+    a.addEventListener("canplaythrough", ok, { once: true });
+    a.addEventListener("error", bad, { once: true });
+    a.src = BGM_URL;
+    a.load();
+  });
+  if (canUseHtml) {
+    try {
+      await a.play();
+      gameMusic.html = a;
+      return;
+    } catch {
+      /* autoplay or decode failed */
+    }
+  }
+  startProceduralBgm();
+}
+
+function playWordScoreSound() {
+  const ctx = getSfxContext();
+  if (!ctx || ctx.state !== "running") return;
+  const t = ctx.currentTime;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.11, t);
+  g.gain.exponentialRampToValueAtTime(0.0008, t + 0.14);
+  g.connect(ctx.destination);
+  const o1 = ctx.createOscillator();
+  const o2 = ctx.createOscillator();
+  o1.type = "sine";
+  o2.type = "sine";
+  o1.frequency.setValueAtTime(523.25, t);
+  o2.frequency.setValueAtTime(783.99, t);
+  o1.connect(g);
+  o2.connect(g);
+  o1.start(t);
+  o2.start(t);
+  o1.stop(t + 0.15);
+  o2.stop(t + 0.15);
+}
+
+function playInvalidWordSound() {
+  const ctx = getSfxContext();
+  if (!ctx || ctx.state !== "running") return;
+  const t = ctx.currentTime;
+  const master = ctx.createGain();
+  master.gain.setValueAtTime(0.085, t);
+  master.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+  master.connect(ctx.destination);
+
+  const o1 = ctx.createOscillator();
+  const o2 = ctx.createOscillator();
+  o1.type = "triangle";
+  o2.type = "triangle";
+  o1.frequency.setValueAtTime(200, t);
+  o1.frequency.exponentialRampToValueAtTime(90, t + 0.17);
+  o2.frequency.setValueAtTime(212, t);
+  o2.frequency.exponentialRampToValueAtTime(95, t + 0.17);
+  o1.connect(master);
+  o2.connect(master);
+  o1.start(t);
+  o2.start(t);
+  o1.stop(t + 0.2);
+  o2.stop(t + 0.2);
+}
 
 function formatTime(sec) {
   const m = Math.floor(sec / 60);
@@ -669,7 +816,8 @@ function getPathVisualState() {
   if (!wordSet || wordSet.size === 0) return "pending";
   const word = pathToWord(board, path);
   if (word.length < MIN_WORD_LEN) return "pending";
-  if (!wordSet.has(word) || foundWords.has(word)) return "invalid";
+  if (foundWords.has(word)) return "pending";
+  if (!wordSet.has(word)) return "invalid";
   return "valid";
 }
 
@@ -817,13 +965,20 @@ function submitPath() {
   updatePathUI();
 
   if (word.length < MIN_WORD_LEN) return;
-  if (!wordSet.has(word)) return;
-  if (foundWords.has(word)) return;
+  if (!wordSet.has(word)) {
+    void resumeSfxContext().then(() => playInvalidWordSound());
+    return;
+  }
+  if (foundWords.has(word)) {
+    void resumeSfxContext().then(() => playInvalidWordSound());
+    return;
+  }
 
   foundWords.add(word);
   const pts = scoreForWord(word.length);
   score += pts;
   els.score.textContent = String(score);
+  void resumeSfxContext().then(() => playWordScoreSound());
 
   const li = document.createElement("li");
   li.textContent = `${word} +${pts}`;
@@ -884,9 +1039,11 @@ function enterMultiGameFromState(st) {
   }
 
   startGameTimer();
+  void startGameMusic();
 }
 
 function showMpResultFromState(st) {
+  stopGameMusic();
   const hs = st.hostScore ?? 0;
   const gs = st.guestScore ?? 0;
   let outcome = "";
@@ -900,8 +1057,13 @@ function showMpResultFromState(st) {
     else outcome = "Tie game!";
   }
   els.mpResultTitle.textContent = outcome;
-  els.mpResultBody.textContent = "Highest score wins — same letters, same time limit.";
-  els.mpResultScores.textContent = `Host ${hs} pts · Guest ${gs} pts`;
+  if (els.mpResultBody) {
+    els.mpResultBody.textContent = "Same board and time — highest total score wins.";
+  }
+  if (els.mpResultHostScore) els.mpResultHostScore.textContent = String(hs);
+  if (els.mpResultGuestScore) els.mpResultGuestScore.textContent = String(gs);
+  if (els.mpResultHostBox) els.mpResultHostBox.classList.toggle("mp-score-you", mp.role === "host");
+  if (els.mpResultGuestBox) els.mpResultGuestBox.classList.toggle("mp-score-you", mp.role === "guest");
   els.modalMpResult.hidden = false;
   els.modalEnd.hidden = true;
   stopGameTimer();
@@ -1004,6 +1166,7 @@ function startSoloRound() {
   els.modalMpWait.hidden = true;
 
   startGameTimer();
+  void startGameMusic();
 }
 
 async function createMultiplayerRoom() {
@@ -1166,6 +1329,7 @@ async function resumeGuestFromUrl() {
 }
 
 function backToMenu() {
+  stopGameMusic();
   clearMpPollers();
   resetMpState();
   els.modalMpResult.hidden = true;
@@ -1236,6 +1400,7 @@ els.btnPlayAgain.addEventListener("click", () => {
   if (mp.active || mp.roomId) {
     backToMenu();
   } else {
+    stopGameMusic();
     els.modalEnd.hidden = true;
     els.setup.hidden = false;
     els.game.hidden = true;

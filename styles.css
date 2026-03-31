@@ -137,6 +137,59 @@ body {
   text-align: center;
 }
 
+.modal-card--mp-result .mp-result-note {
+  margin: 0.75rem 0 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.mp-score-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+  margin: 1rem 0 0.25rem;
+  width: 100%;
+}
+
+.mp-score-box {
+  background: var(--surface-2);
+  border-radius: 12px;
+  padding: 0.75rem 0.5rem;
+  text-align: center;
+  border: 2px solid transparent;
+}
+
+.mp-score-box.mp-score-you {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(61, 220, 151, 0.25);
+}
+
+.mp-score-role {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+}
+
+.mp-score-value {
+  display: block;
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: var(--accent);
+  line-height: 1.1;
+}
+
+.mp-score-unit {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--muted);
+  margin-top: 0.15rem;
+}
+
 .auth-form-hint {
   margin: 0 0 1rem;
   font-size: 0.8rem;

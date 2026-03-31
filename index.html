@@ -133,10 +133,21 @@
       </div>
 
       <div class="modal" id="modal-mp-result" hidden>
-        <div class="modal-card">
+        <div class="modal-card modal-card--mp-result">
           <h2 id="mp-result-title">Match result</h2>
-          <p class="modal-score" id="mp-result-body"></p>
-          <p class="modal-words" id="mp-result-scores"></p>
+          <div class="mp-score-grid" role="group" aria-label="Final scores">
+            <div class="mp-score-box" id="mp-result-host-box">
+              <span class="mp-score-role">Host</span>
+              <span class="mp-score-value" id="mp-result-host-score">0</span>
+              <span class="mp-score-unit">pts</span>
+            </div>
+            <div class="mp-score-box" id="mp-result-guest-box">
+              <span class="mp-score-role">Guest</span>
+              <span class="mp-score-value" id="mp-result-guest-score">0</span>
+              <span class="mp-score-unit">pts</span>
+            </div>
+          </div>
+          <p class="modal-score mp-result-note" id="mp-result-body"></p>
           <button type="button" class="btn primary" id="btn-mp-done">Back to menu</button>
         </div>
       </div>
