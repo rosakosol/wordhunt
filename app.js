@@ -156,7 +156,9 @@ const els = {
   btnOpenLb: document.getElementById("btn-open-lb"),
   btnLogout: document.getElementById("btn-logout"),
   modalRegister: document.getElementById("modal-register"),
+  formRegister: document.getElementById("form-register"),
   modalLogin: document.getElementById("modal-login"),
+  formLogin: document.getElementById("form-login"),
   modalLeaderboard: document.getElementById("modal-leaderboard"),
   regUsername: document.getElementById("reg-username"),
   regPassword: document.getElementById("reg-password"),
@@ -1495,7 +1497,8 @@ function setAuthFormBusy(kind, busy) {
   if (toggle) toggle.disabled = busy;
 }
 
-els.btnRegisterSubmit?.addEventListener("click", async () => {
+els.formRegister?.addEventListener("submit", async (e) => {
+  e.preventDefault();
   if (!els.regMsg || !els.regUsername || !els.regPassword) return;
   els.regMsg.textContent = "";
   const username = els.regUsername.value.trim();
@@ -1522,7 +1525,8 @@ els.btnRegisterSubmit?.addEventListener("click", async () => {
   }
 });
 
-els.btnLoginSubmit?.addEventListener("click", async () => {
+els.formLogin?.addEventListener("submit", async (e) => {
+  e.preventDefault();
   if (!els.loginMsg || !els.loginUsername || !els.loginPassword) return;
   els.loginMsg.textContent = "";
   const username = els.loginUsername.value.trim();

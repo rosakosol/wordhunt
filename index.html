@@ -155,15 +155,40 @@
       <div class="modal" id="modal-register" hidden>
         <div class="modal-card modal-card--form">
           <h2>Register</h2>
-          <p class="auth-form-hint">3–20 characters: letters, numbers, or _. Password at least 8 characters.</p>
-          <label class="modal-field">
-            <span class="field-label">Username</span>
-            <input type="text" id="reg-username" autocomplete="username" maxlength="20" />
-          </label>
-          <label class="modal-field modal-field--password">
-            <span class="field-label">Password</span>
-            <div class="password-input-wrap">
-              <input type="password" id="reg-password" autocomplete="new-password" />
+          <form
+            id="form-register"
+            class="auth-form"
+            method="post"
+            action=""
+            autocomplete="on"
+          >
+            <p class="auth-form-hint">3–20 characters: letters, numbers, or _. Password at least 8 characters.</p>
+            <label class="modal-field" for="reg-username">
+              <span class="field-label">Username</span>
+              <input
+                type="text"
+                id="reg-username"
+                name="username"
+                autocomplete="username"
+                maxlength="20"
+                minlength="3"
+                required
+                inputmode="text"
+                pattern="[a-zA-Z0-9_]{3,20}"
+                title="3–20 letters, numbers, or underscore"
+              />
+            </label>
+            <label class="modal-field modal-field--password" for="reg-password">
+              <span class="field-label">Password</span>
+              <div class="password-input-wrap">
+                <input
+                  type="password"
+                  id="reg-password"
+                  name="password"
+                  autocomplete="new-password"
+                  required
+                  minlength="8"
+                />
               <button
                 type="button"
                 class="password-toggle"
@@ -180,27 +205,46 @@
                 </svg>
               </button>
             </div>
-          </label>
-          <p class="auth-msg" id="reg-msg" role="alert"></p>
-          <button type="button" class="btn primary" id="btn-register-submit">
-            <span class="btn-label">Create account</span>
-            <span class="btn-spinner" aria-hidden="true"></span>
-          </button>
-          <button type="button" class="btn ghost" id="btn-register-cancel">Cancel</button>
+            </label>
+            <p class="auth-msg" id="reg-msg" role="alert"></p>
+            <button type="submit" class="btn primary" id="btn-register-submit">
+              <span class="btn-label">Create account</span>
+              <span class="btn-spinner" aria-hidden="true"></span>
+            </button>
+            <button type="button" class="btn ghost" id="btn-register-cancel">Cancel</button>
+          </form>
         </div>
       </div>
 
       <div class="modal" id="modal-login" hidden>
         <div class="modal-card modal-card--form">
           <h2>Log in</h2>
-          <label class="modal-field">
-            <span class="field-label">Username</span>
-            <input type="text" id="login-username" autocomplete="username" maxlength="20" />
-          </label>
-          <label class="modal-field modal-field--password">
-            <span class="field-label">Password</span>
-            <div class="password-input-wrap">
-              <input type="password" id="login-password" autocomplete="current-password" />
+          <form id="form-login" class="auth-form" method="post" action="" autocomplete="on">
+            <label class="modal-field" for="login-username">
+              <span class="field-label">Username</span>
+              <input
+                type="text"
+                id="login-username"
+                name="username"
+                autocomplete="username"
+                maxlength="20"
+                minlength="3"
+                required
+                inputmode="text"
+                pattern="[a-zA-Z0-9_]{3,20}"
+                title="3–20 letters, numbers, or underscore"
+              />
+            </label>
+            <label class="modal-field modal-field--password" for="login-password">
+              <span class="field-label">Password</span>
+              <div class="password-input-wrap">
+                <input
+                  type="password"
+                  id="login-password"
+                  name="password"
+                  autocomplete="current-password"
+                  required
+                />
               <button
                 type="button"
                 class="password-toggle"
@@ -217,13 +261,14 @@
                 </svg>
               </button>
             </div>
-          </label>
-          <p class="auth-msg" id="login-msg" role="alert"></p>
-          <button type="button" class="btn primary" id="btn-login-submit">
-            <span class="btn-label">Log in</span>
-            <span class="btn-spinner" aria-hidden="true"></span>
-          </button>
-          <button type="button" class="btn ghost" id="btn-login-cancel">Close</button>
+            </label>
+            <p class="auth-msg" id="login-msg" role="alert"></p>
+            <button type="submit" class="btn primary" id="btn-login-submit">
+              <span class="btn-label">Log in</span>
+              <span class="btn-spinner" aria-hidden="true"></span>
+            </button>
+            <button type="button" class="btn ghost" id="btn-login-cancel">Close</button>
+          </form>
         </div>
       </div>
 

@@ -133,6 +133,13 @@ body {
   text-align: left;
 }
 
+.auth-form {
+  margin: 0;
+  padding: 0;
+  border: none;
+  min-width: 0;
+}
+
 .modal-card--form h2 {
   text-align: center;
 }
