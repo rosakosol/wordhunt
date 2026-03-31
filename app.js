@@ -134,6 +134,10 @@ const els = {
   mpResultGuestBox: document.getElementById("mp-result-guest-box"),
   mpResultHostScore: document.getElementById("mp-result-host-score"),
   mpResultGuestScore: document.getElementById("mp-result-guest-score"),
+  mpResultHostWords: document.getElementById("mp-result-host-words"),
+  mpResultGuestWords: document.getElementById("mp-result-guest-words"),
+  mpResultWordsHostLabel: document.getElementById("mp-result-words-host-label"),
+  mpResultWordsGuestLabel: document.getElementById("mp-result-words-guest-label"),
   btnMpDone: document.getElementById("btn-mp-done"),
   tabSolo: document.getElementById("tab-solo"),
   tabMulti: document.getElementById("tab-multi"),
@@ -177,6 +181,33 @@ const els = {
   lbMsg: document.getElementById("lb-msg"),
   btnLbClose: document.getElementById("btn-lb-close"),
 };
+
+function syncAuthFormActionUrl() {
+  try {
+    const u = new URL(window.location.href);
+    u.hash = "";
+    const actionUrl = u.href;
+    if (els.formRegister) els.formRegister.action = actionUrl;
+    if (els.formLogin) els.formLogin.action = actionUrl;
+  } catch {
+    /* ignore */
+  }
+}
+syncAuthFormActionUrl();
+window.addEventListener("popstate", syncAuthFormActionUrl);
+
+/** Ask the browser / OS to save credentials (HTTPS or localhost only). */
+async function tryStorePasswordCredential(formEl) {
+  if (!formEl || !window.isSecureContext) return;
+  const PC = window.PasswordCredential;
+  if (!PC || !navigator.credentials?.store) return;
+  try {
+    if (!formEl.checkValidity()) return;
+    await navigator.credentials.store(new PC(formEl));
+  } catch {
+    /* user declined, private mode, or unsupported */
+  }
+}
 
 let board = [];
 /** @type {Array<[number, number]>} */
@@ -311,8 +342,8 @@ function playInvalidWordSound() {
   if (!ctx || ctx.state !== "running") return;
   const t = ctx.currentTime;
   const master = ctx.createGain();
-  master.gain.setValueAtTime(0.085, t);
-  master.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+  master.gain.setValueAtTime(0.22, t);
+  master.gain.exponentialRampToValueAtTime(0.001, t + 0.24);
   master.connect(ctx.destination);
 
   const o1 = ctx.createOscillator();
@@ -327,8 +358,8 @@ function playInvalidWordSound() {
   o2.connect(master);
   o1.start(t);
   o2.start(t);
-  o1.stop(t + 0.2);
-  o2.stop(t + 0.2);
+  o1.stop(t + 0.25);
+  o2.stop(t + 0.25);
 }
 
 function formatTime(sec) {
@@ -1046,6 +1077,24 @@ function enterMultiGameFromState(st) {
   void startGameMusic();
 }
 
+function fillMpResultWordList(ul, words) {
+  if (!ul) return;
+  ul.replaceChildren();
+  const list = Array.isArray(words) ? words : [];
+  if (list.length === 0) {
+    const li = document.createElement("li");
+    li.className = "mp-result-word-empty";
+    li.textContent = "No words";
+    ul.appendChild(li);
+    return;
+  }
+  list.forEach((w) => {
+    const li = document.createElement("li");
+    li.textContent = w;
+    ul.appendChild(li);
+  });
+}
+
 function showMpResultFromState(st) {
   stopGameMusic();
   const hs = st.hostScore ?? 0;
@@ -1068,6 +1117,14 @@ function showMpResultFromState(st) {
   if (els.mpResultGuestScore) els.mpResultGuestScore.textContent = String(gs);
   if (els.mpResultHostBox) els.mpResultHostBox.classList.toggle("mp-score-you", mp.role === "host");
   if (els.mpResultGuestBox) els.mpResultGuestBox.classList.toggle("mp-score-you", mp.role === "guest");
+  if (els.mpResultWordsHostLabel) {
+    els.mpResultWordsHostLabel.classList.toggle("mp-result-words-you", mp.role === "host");
+  }
+  if (els.mpResultWordsGuestLabel) {
+    els.mpResultWordsGuestLabel.classList.toggle("mp-result-words-you", mp.role === "guest");
+  }
+  fillMpResultWordList(els.mpResultHostWords, st.hostFoundWords);
+  fillMpResultWordList(els.mpResultGuestWords, st.guestFoundWords);
   els.modalMpResult.hidden = false;
   els.modalEnd.hidden = true;
   stopGameTimer();
@@ -1082,9 +1139,15 @@ async function submitMpScoreAndFinish() {
       secret: mp.secret,
       score,
       wordCount: foundWords.size,
+      words: [...foundWords].sort(),
     });
     if (sub.bothDone) {
-      const fin = { hostScore: sub.hostScore, guestScore: sub.guestScore };
+      const fin = {
+        hostScore: sub.hostScore,
+        guestScore: sub.guestScore,
+        hostFoundWords: sub.hostFoundWords,
+        guestFoundWords: sub.guestFoundWords,
+      };
       showMpResultFromState(fin);
       submitMpLeaderboardFromState(fin);
       els.modalMpWait.hidden = true;
@@ -1096,7 +1159,12 @@ async function submitMpScoreAndFinish() {
           if (st.hostSubmitted && st.guestSubmitted) {
             clearInterval(mpResultPollTimer);
             mpResultPollTimer = null;
-            const fin = { hostScore: st.hostScore, guestScore: st.guestScore };
+            const fin = {
+              hostScore: st.hostScore,
+              guestScore: st.guestScore,
+              hostFoundWords: st.hostFoundWords,
+              guestFoundWords: st.guestFoundWords,
+            };
             showMpResultFromState(fin);
             submitMpLeaderboardFromState(fin);
             els.modalMpWait.hidden = true;
@@ -1280,7 +1348,12 @@ async function resumeHostFromUrl() {
     const st = await mpFetchState(params.roomId, "host", params.secret);
     if (st.endsAt) {
       if (st.hostSubmitted && st.guestSubmitted) {
-        showMpResultFromState({ hostScore: st.hostScore, guestScore: st.guestScore });
+        showMpResultFromState({
+          hostScore: st.hostScore,
+          guestScore: st.guestScore,
+          hostFoundWords: st.hostFoundWords,
+          guestFoundWords: st.guestFoundWords,
+        });
         els.setup.hidden = false;
         els.game.hidden = true;
         return;
@@ -1317,7 +1390,12 @@ async function resumeGuestFromUrl() {
   try {
     const st = await mpFetchState(params.roomId, "guest", params.secret);
     if (st.hostSubmitted && st.guestSubmitted) {
-      showMpResultFromState({ hostScore: st.hostScore, guestScore: st.guestScore });
+      showMpResultFromState({
+        hostScore: st.hostScore,
+        guestScore: st.guestScore,
+        hostFoundWords: st.hostFoundWords,
+        guestFoundWords: st.guestFoundWords,
+      });
       return;
     }
     if (st.endsAt) {
@@ -1514,6 +1592,8 @@ els.formRegister?.addEventListener("submit", async (e) => {
         "Could not register.";
       return;
     }
+    setAuthFormBusy("register", false);
+    await tryStorePasswordCredential(els.formRegister);
     const displayName = String(data.username || username);
     applyAuthResponse(data);
     window.alert(`Registration successful! You are signed in as ${displayName}.`);
@@ -1542,6 +1622,8 @@ els.formLogin?.addEventListener("submit", async (e) => {
         "Could not log in.";
       return;
     }
+    setAuthFormBusy("login", false);
+    await tryStorePasswordCredential(els.formLogin);
     const displayName = String(data.username || username);
     applyAuthResponse(data);
     window.alert(`Login successful! Welcome back, ${displayName}.`);

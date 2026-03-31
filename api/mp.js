@@ -25,6 +25,20 @@ function parseRoom(raw) {
   }
 }
 
+/** @param {unknown} raw */
+function sanitizeWordList(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const w of raw) {
+    const s = String(w)
+      .toLowerCase()
+      .replace(/[^a-z]/g, "");
+    if (s.length >= 3 && s.length <= 20) out.push(s);
+    if (out.length >= 500) break;
+  }
+  return [...new Set(out)].sort();
+}
+
 function readQuery(req, key) {
   const q = req.query || {};
   if (q[key] != null && q[key] !== "") return String(q[key]);
@@ -96,6 +110,8 @@ export default async function handler(req, res) {
         guestScore: null,
         hostWords: 0,
         guestWords: 0,
+        hostWordList: [],
+        guestWordList: [],
         hostSubmitted: false,
         guestSubmitted: false,
         guestJoined: false,
@@ -168,6 +184,12 @@ export default async function handler(req, res) {
         guestSubmitted: room.guestSubmitted,
         hostWords: room.hostWords,
         guestWords: room.guestWords,
+        ...(room.hostSubmitted && room.guestSubmitted
+          ? {
+              hostFoundWords: room.hostWordList || [],
+              guestFoundWords: room.guestWordList || [],
+            }
+          : {}),
         guestJoined: !!room.guestJoined,
         serverNow: Date.now(),
       });
@@ -175,7 +197,7 @@ export default async function handler(req, res) {
     }
 
     if (action === "submit" && req.method === "POST") {
-      const { roomId, role, secret, score: scoreVal, wordCount } = body;
+      const { roomId, role, secret, score: scoreVal, wordCount, words } = body;
       const raw = await r.get(roomKey(roomId));
       const room = parseRoom(raw);
       if (!room) {
@@ -196,13 +218,16 @@ export default async function handler(req, res) {
         res.status(400).json({ error: "invalid_score" });
         return;
       }
+      const wordList = sanitizeWordList(words);
       if (role === "host") {
         room.hostScore = s;
         room.hostWords = wc;
+        room.hostWordList = wordList;
         room.hostSubmitted = true;
       } else {
         room.guestScore = s;
         room.guestWords = wc;
+        room.guestWordList = wordList;
         room.guestSubmitted = true;
       }
       let winner = null;
@@ -218,6 +243,8 @@ export default async function handler(req, res) {
         winner,
         hostScore: room.hostScore,
         guestScore: room.guestScore,
+        hostFoundWords: room.hostWordList || [],
+        guestFoundWords: room.guestWordList || [],
       });
       return;
     }

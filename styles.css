@@ -144,10 +144,73 @@ body {
   text-align: center;
 }
 
+.modal-card--mp-result {
+  max-width: min(440px, 96vw);
+}
+
 .modal-card--mp-result .mp-result-note {
   margin: 0.75rem 0 0;
   font-size: 0.9rem;
   color: var(--muted);
+}
+
+.mp-result-words-wrap {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin: 1rem 0 0;
+  width: 100%;
+  text-align: left;
+}
+
+.mp-result-words-heading {
+  margin: 0 0 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.mp-result-words-heading.mp-result-words-you {
+  color: var(--accent);
+}
+
+.mp-result-word-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.4rem 0.5rem;
+  max-height: 12rem;
+  overflow-y: auto;
+  border-radius: 10px;
+  border: 2px solid var(--surface-2);
+  background: var(--bg);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text);
+  -webkit-overflow-scrolling: touch;
+}
+
+.mp-result-word-list li {
+  padding: 0.25rem 0;
+  border-bottom: 1px solid var(--surface-2);
+  word-break: break-word;
+}
+
+.mp-result-word-list li:last-child {
+  border-bottom: none;
+}
+
+.mp-result-word-empty {
+  color: var(--muted);
+  font-weight: 600;
+  font-style: italic;
+}
+
+@media (max-width: 380px) {
+  .mp-result-words-wrap {
+    grid-template-columns: 1fr;
+  }
 }
 
 .mp-score-grid {
