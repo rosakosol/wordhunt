@@ -75,6 +75,14 @@ body {
   min-height: 1.25em;
 }
 
+/* Logged in: username, pts, rank — more prominent */
+.auth-summary:not(:empty) {
+  font-size: 1.12rem;
+  font-weight: 800;
+  line-height: 1.35;
+  margin-bottom: 0.4rem;
+}
+
 /* Guest: no summary text — don’t reserve a blank line inside the bar */
 .auth-summary:empty {
   margin: 0;
@@ -88,6 +96,15 @@ body {
   justify-content: center;
   gap: 0.25rem 0.35rem;
   font-size: 0.85rem;
+}
+
+/* Only when visible — a bare #id { display: flex } would override [hidden] */
+#auth-btns-guest:not([hidden]),
+#auth-btns-user:not([hidden]) {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.35rem;
 }
 
 .auth-dot {
@@ -575,12 +592,59 @@ body {
 }
 
 .tile.in-path {
-  background: var(--tile-path);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.2);
+}
+
+/* Dragging: still building or under min length — yellow */
+.tile.in-path.path-pending {
+  background: linear-gradient(160deg, #6b5a1a 0%, #4a3d12 100%);
+  box-shadow: inset 0 0 0 2px #e6c229;
+  color: #fff8e0;
+}
+
+/* Valid dictionary word, not yet submitted — green */
+.tile.in-path.path-valid {
+  background: linear-gradient(160deg, #2d6b45 0%, #1e4a30 100%);
   box-shadow: inset 0 0 0 2px var(--accent);
+  color: #e8fff0;
+}
+
+/* Long enough but wrong or already found — red */
+.tile.in-path.path-invalid {
+  background: linear-gradient(160deg, #7a3030 0%, #4f1f1f 100%);
+  box-shadow: inset 0 0 0 2px var(--danger);
+  color: #ffe8e8;
 }
 
 .tile.last {
   transform: scale(1.03);
+}
+
+.board-stack[data-path-visual="pending"] .path-line {
+  stroke: #e6c229;
+}
+
+.board-stack[data-path-visual="pending"] .path-node,
+.board-stack[data-path-visual="pending"] .path-node-end {
+  fill: #e6c229;
+}
+
+.board-stack[data-path-visual="valid"] .path-line {
+  stroke: var(--accent);
+}
+
+.board-stack[data-path-visual="valid"] .path-node,
+.board-stack[data-path-visual="valid"] .path-node-end {
+  fill: var(--accent);
+}
+
+.board-stack[data-path-visual="invalid"] .path-line {
+  stroke: var(--danger);
+}
+
+.board-stack[data-path-visual="invalid"] .path-node,
+.board-stack[data-path-visual="invalid"] .path-node-end {
+  fill: var(--danger);
 }
 
 .help {

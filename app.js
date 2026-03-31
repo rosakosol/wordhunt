@@ -143,13 +143,12 @@ const els = {
   mpGuestMsg: document.getElementById("mp-guest-msg"),
   mpRolePill: document.getElementById("mp-role-pill"),
   authSummary: document.getElementById("auth-summary"),
+  authBtnsGuest: document.getElementById("auth-btns-guest"),
+  authBtnsUser: document.getElementById("auth-btns-user"),
   btnOpenRegister: document.getElementById("btn-open-register"),
   btnOpenLogin: document.getElementById("btn-open-login"),
   btnOpenLb: document.getElementById("btn-open-lb"),
-  loginSignedIn: document.getElementById("login-signed-in"),
-  loginSignedInMsg: document.getElementById("login-signed-in-msg"),
-  loginFormWrap: document.getElementById("login-form"),
-  btnLoginLogout: document.getElementById("btn-login-logout"),
+  btnLogout: document.getElementById("btn-logout"),
   modalRegister: document.getElementById("modal-register"),
   modalLogin: document.getElementById("modal-login"),
   modalLeaderboard: document.getElementById("modal-leaderboard"),
@@ -345,24 +344,16 @@ function clearAuth() {
 }
 
 function updateAuthBar() {
+  const guest = !authToken;
+  if (els.authBtnsGuest) els.authBtnsGuest.hidden = !guest;
+  if (els.authBtnsUser) els.authBtnsUser.hidden = guest;
   if (!els.authSummary) return;
-  if (!authToken) {
+  if (guest) {
     els.authSummary.textContent = "";
   } else {
     const pts = Number(authTotal) || 0;
     const r = authRank != null && Number.isFinite(authRank) ? ` · #${authRank} on board` : "";
     els.authSummary.textContent = `${authUsername} — ${pts} pts${r}`;
-  }
-}
-
-function syncLoginModalLayout() {
-  const signedIn = !!authToken;
-  if (els.loginSignedIn) els.loginSignedIn.hidden = !signedIn;
-  if (els.loginFormWrap) els.loginFormWrap.hidden = signedIn;
-  if (els.btnLoginSubmit) els.btnLoginSubmit.hidden = signedIn;
-  if (signedIn && els.loginSignedInMsg) {
-    const pts = Number(authTotal) || 0;
-    els.loginSignedInMsg.textContent = `You’re signed in as ${authUsername} (${pts} total pts). Log out to switch accounts.`;
   }
 }
 
@@ -672,15 +663,32 @@ function renderBoard() {
   requestAnimationFrame(() => updatePathLine());
 }
 
+/** @returns {"pending" | "valid" | "invalid" | null} */
+function getPathVisualState() {
+  if (!path.length) return null;
+  if (!wordSet || wordSet.size === 0) return "pending";
+  const word = pathToWord(board, path);
+  if (word.length < MIN_WORD_LEN) return "pending";
+  if (!wordSet.has(word) || foundWords.has(word)) return "invalid";
+  return "valid";
+}
+
 function updatePathUI() {
   const tiles = els.board.querySelectorAll(".tile");
   tiles.forEach((t) => {
-    t.classList.remove("in-path", "last");
+    t.classList.remove("in-path", "last", "path-pending", "path-valid", "path-invalid");
   });
+  const pathVisual = getPathVisualState();
+  const stack = els.board.parentElement;
+  if (stack?.classList.contains("board-stack")) {
+    if (pathVisual) stack.dataset.pathVisual = pathVisual;
+    else delete stack.dataset.pathVisual;
+  }
   path.forEach(([r, c], idx) => {
     const t = els.board.querySelector(`[data-r="${r}"][data-c="${c}"]`);
     if (t) {
       t.classList.add("in-path");
+      if (pathVisual) t.classList.add(`path-${pathVisual}`);
       if (idx === path.length - 1) t.classList.add("last");
     }
   });
@@ -1251,7 +1259,6 @@ els.btnOpenRegister?.addEventListener("click", () => {
 
 els.btnOpenLogin?.addEventListener("click", () => {
   if (els.loginMsg) els.loginMsg.textContent = "";
-  syncLoginModalLayout();
   if (els.modalLogin) els.modalLogin.hidden = false;
 });
 
@@ -1307,10 +1314,7 @@ els.btnLoginSubmit?.addEventListener("click", async () => {
   els.loginPassword.value = "";
 });
 
-els.btnLoginLogout?.addEventListener("click", () => {
-  clearAuth();
-  syncLoginModalLayout();
-});
+els.btnLogout?.addEventListener("click", () => clearAuth());
 
 window.addEventListener("pointermove", onWindowPointerMove);
 window.addEventListener("pointerup", onGlobalPointerUp);
