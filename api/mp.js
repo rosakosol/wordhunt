@@ -1,5 +1,5 @@
-import { Redis } from "@upstash/redis";
-import { randomBytes } from "node:crypto";
+const { Redis } = require("@upstash/redis");
+const { randomBytes } = require("crypto");
 
 function getRedis() {
   const url = process.env.UPSTASH_REDIS_REST_URL;
@@ -32,7 +32,27 @@ function parseRoom(raw) {
   }
 }
 
-export default async function handler(req, res) {
+function readQuery(req, key) {
+  const q = req.query || {};
+  if (q[key] != null && q[key] !== "") return String(q[key]);
+  try {
+    const u = new URL(req.url || "/", "https://placeholder.local");
+    const v = u.searchParams.get(key);
+    if (v != null && v !== "") return v;
+  } catch {
+    /* ignore */
+  }
+  return "";
+}
+
+function getAction(req, body) {
+  const fromQ = readQuery(req, "action");
+  if (fromQ) return fromQ;
+  if (body && body.action) return String(body.action);
+  return "";
+}
+
+module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -46,7 +66,7 @@ export default async function handler(req, res) {
     res.status(503).json({
       error: "missing_redis",
       message:
-        "Add Upstash Redis: create a database at upstash.com, then set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN on Vercel (Settings → Environment Variables).",
+        "Add Upstash Redis: create a database at upstash.com, then set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN in .env.local (vercel dev) or Vercel project env.",
     });
     return;
   }
@@ -60,15 +80,14 @@ export default async function handler(req, res) {
     }
   }
 
-  const url = new URL(req.url, "https://placeholder.local");
-  const action = url.searchParams.get("action") || body.action;
+  const action = getAction(req, body);
 
   try {
     if (action === "create" && req.method === "POST") {
       const { board, durationMinutes } = body;
       const dm = Number(durationMinutes);
       if (!isValidBoard(board) || !Number.isFinite(dm) || dm < 1 || dm > 60) {
-        res.status(400).json({ error: "invalid_body" });
+        res.status(400).json({ error: "invalid_body", message: "Invalid board or duration." });
         return;
       }
       const roomId = randomBytes(6).toString("hex");
@@ -124,9 +143,9 @@ export default async function handler(req, res) {
     }
 
     if (action === "state" && req.method === "GET") {
-      const roomId = url.searchParams.get("roomId");
-      const role = url.searchParams.get("p");
-      const secret = url.searchParams.get("s");
+      const roomId = readQuery(req, "roomId");
+      const role = readQuery(req, "p");
+      const secret = readQuery(req, "s");
       const raw = await r.get(roomKey(roomId));
       const room = parseRoom(raw);
       if (!room) {
@@ -202,9 +221,12 @@ export default async function handler(req, res) {
       return;
     }
 
-    res.status(400).json({ error: "unknown_action" });
+    res.status(400).json({
+      error: "unknown_action",
+      message: action ? `Unknown action: ${action}` : "Missing action. Use create, start, state, or submit.",
+    });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "server_error" });
   }
-}
+};
