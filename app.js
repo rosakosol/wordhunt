@@ -999,7 +999,11 @@ function updatePathUI() {
     }
   });
   const w = path.length ? pathToWord(board, path) : "";
-  els.currentWord.textContent = w ? w.toUpperCase() : "—";
+  if (els.currentWord) {
+    els.currentWord.textContent = w ? w.toUpperCase() : "—";
+    els.currentWord.classList.remove("hud-word--pending", "hud-word--valid", "hud-word--invalid");
+    if (pathVisual) els.currentWord.classList.add(`hud-word--${pathVisual}`);
+  }
   requestAnimationFrame(() => updatePathLine());
 }
 
@@ -1227,24 +1231,27 @@ function fillMpResultWordList(ul, words) {
 
 function showMpResultFromState(st) {
   stopGameMusic();
-  const hs = st.hostScore ?? 0;
-  const gs = st.guestScore ?? 0;
+  if (mpResultPollTimer) {
+    clearInterval(mpResultPollTimer);
+    mpResultPollTimer = null;
+  }
+  const hs = Number(st.hostScore);
+  const gs = Number(st.guestScore);
+  const hostPts = Number.isFinite(hs) ? hs : 0;
+  const guestPts = Number.isFinite(gs) ? gs : 0;
   let outcome = "";
   if (mp.role === "host") {
-    if (hs > gs) outcome = "You win!";
-    else if (gs > hs) outcome = "Opponent wins.";
+    if (hostPts > guestPts) outcome = "You win!";
+    else if (guestPts > hostPts) outcome = "Opponent wins.";
     else outcome = "Tie game!";
   } else {
-    if (gs > hs) outcome = "You win!";
-    else if (hs > gs) outcome = "Opponent wins.";
+    if (guestPts > hostPts) outcome = "You win!";
+    else if (hostPts > guestPts) outcome = "Opponent wins.";
     else outcome = "Tie game!";
   }
   els.mpResultTitle.textContent = outcome;
-  if (els.mpResultBody) {
-    els.mpResultBody.textContent = "Same board and time — highest total score wins.";
-  }
-  if (els.mpResultHostScore) els.mpResultHostScore.textContent = String(hs);
-  if (els.mpResultGuestScore) els.mpResultGuestScore.textContent = String(gs);
+  if (els.mpResultHostScore) els.mpResultHostScore.textContent = String(hostPts);
+  if (els.mpResultGuestScore) els.mpResultGuestScore.textContent = String(guestPts);
   if (els.mpResultHostBox) els.mpResultHostBox.classList.toggle("mp-score-you", mp.role === "host");
   if (els.mpResultGuestBox) els.mpResultGuestBox.classList.toggle("mp-score-you", mp.role === "guest");
   if (els.mpResultWordsHostLabel) {
@@ -1253,8 +1260,10 @@ function showMpResultFromState(st) {
   if (els.mpResultWordsGuestLabel) {
     els.mpResultWordsGuestLabel.classList.toggle("mp-result-words-you", mp.role === "guest");
   }
-  fillMpResultWordList(els.mpResultHostWords, st.hostFoundWords);
-  fillMpResultWordList(els.mpResultGuestWords, st.guestFoundWords);
+  fillMpResultWordList(els.mpResultHostWords, st.hostFoundWords ?? []);
+  fillMpResultWordList(els.mpResultGuestWords, st.guestFoundWords ?? []);
+  els.modalMpWait.hidden = true;
+  els.modalMpWait.textContent = "Sending score… waiting for opponent to finish.";
   els.modalMpResult.hidden = false;
   els.modalEnd.hidden = true;
   stopGameTimer();
@@ -1280,12 +1289,11 @@ async function submitMpScoreAndFinish() {
       const fin = {
         hostScore: sub.hostScore,
         guestScore: sub.guestScore,
-        hostFoundWords: sub.hostFoundWords,
-        guestFoundWords: sub.guestFoundWords,
+        hostFoundWords: sub.hostFoundWords ?? [],
+        guestFoundWords: sub.guestFoundWords ?? [],
       };
       showMpResultFromState(fin);
       submitMpLeaderboardFromState(fin);
-      els.modalMpWait.hidden = true;
     } else {
       els.modalMpWait.hidden = false;
       mpResultPollTimer = setInterval(async () => {
@@ -1297,12 +1305,11 @@ async function submitMpScoreAndFinish() {
             const fin = {
               hostScore: st.hostScore,
               guestScore: st.guestScore,
-              hostFoundWords: st.hostFoundWords,
-              guestFoundWords: st.guestFoundWords,
+              hostFoundWords: st.hostFoundWords ?? [],
+              guestFoundWords: st.guestFoundWords ?? [],
             };
             showMpResultFromState(fin);
             submitMpLeaderboardFromState(fin);
-            els.modalMpWait.hidden = true;
           }
         } catch {
           /* keep polling */
@@ -1310,6 +1317,7 @@ async function submitMpScoreAndFinish() {
       }, 1500);
     }
   } catch (e) {
+    if (els.btnPlayAgain) els.btnPlayAgain.hidden = false;
     els.modalMpWait.textContent = `Could not submit score: ${e.message}`;
     els.modalMpWait.hidden = false;
   }
@@ -1332,6 +1340,7 @@ function endRound() {
   });
 
   if (mp.active) {
+    if (els.btnPlayAgain) els.btnPlayAgain.hidden = true;
     if (mpLiveScorePollTimer) {
       clearInterval(mpLiveScorePollTimer);
       mpLiveScorePollTimer = null;
@@ -1342,6 +1351,7 @@ function endRound() {
     els.modalEnd.hidden = false;
     submitMpScoreAndFinish();
   } else {
+    if (els.btnPlayAgain) els.btnPlayAgain.hidden = false;
     els.modalMpWait.hidden = true;
     els.modalMpWait.textContent = "Sending score… waiting for opponent to finish.";
     els.modalEnd.hidden = false;
@@ -1376,6 +1386,7 @@ function startSoloRound() {
   els.modalEnd.hidden = true;
   els.modalMpResult.hidden = true;
   els.modalMpWait.hidden = true;
+  if (els.btnPlayAgain) els.btnPlayAgain.hidden = false;
 
   startGameTimer();
   void startGameMusic();
@@ -1554,6 +1565,7 @@ function backToMenu() {
   stopGameMusic();
   clearMpPollers();
   resetMpState();
+  if (els.btnPlayAgain) els.btnPlayAgain.hidden = false;
   els.modalMpResult.hidden = true;
   els.modalEnd.hidden = true;
   els.setup.hidden = false;
@@ -1619,6 +1631,9 @@ els.btnMpBegin.addEventListener("click", () => hostBeginMatch());
 
 els.btnEndEarly.addEventListener("click", endRound);
 els.btnPlayAgain.addEventListener("click", () => {
+  if (mpResultPollTimer != null) {
+    return;
+  }
   if (mp.active || mp.roomId) {
     backToMenu();
   } else {

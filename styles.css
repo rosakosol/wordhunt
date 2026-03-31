@@ -770,8 +770,21 @@ body {
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--muted);
   word-break: break-all;
+  transition: color 0.12s ease;
+}
+
+.hud-word.hud-word--pending {
+  color: var(--warn);
+}
+
+.hud-word.hud-word--valid {
+  color: var(--accent);
+}
+
+.hud-word.hud-word--invalid {
+  color: var(--danger);
 }
 
 .hud-value.low {
@@ -973,6 +986,10 @@ body {
   justify-content: center;
   padding: 1rem;
   z-index: 100;
+}
+
+#modal-mp-result.modal {
+  z-index: 110;
 }
 
 .modal[hidden] {
