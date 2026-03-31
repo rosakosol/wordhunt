@@ -11,9 +11,12 @@ function authSecret() {
   return s;
 }
 
-function signToken(username) {
+const MS_DAY = 24 * 60 * 60 * 1000;
+
+/** @param {boolean} rememberLongTerm When true, token lasts 30 days; otherwise ~24 hours. */
+function signToken(username, rememberLongTerm = true) {
   const secret = authSecret();
-  const exp = Date.now() + 30 * 24 * 60 * 60 * 1000;
+  const exp = Date.now() + (rememberLongTerm ? 30 * MS_DAY : MS_DAY);
   const payload = Buffer.from(JSON.stringify({ u: username, exp })).toString("base64url");
   const sig = createHmac("sha256", secret).update(payload).digest("base64url");
   return `${payload}.${sig}`;
@@ -203,7 +206,8 @@ export default async function handler(req, res) {
       }
       const total = await totalPointsFor(r, username);
       const rank = await rankFor(r, username);
-      const token = signToken(username);
+      const remember = body.remember === true;
+      const token = signToken(username, remember);
       res.status(200).json({ token, username, totalPoints: total, rank });
       return;
     }

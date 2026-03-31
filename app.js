@@ -33,6 +33,9 @@ const API_AUTH = "/api/auth";
 const LS_AUTH_TOKEN = "wh_auth_token";
 const LS_AUTH_USER = "wh_auth_user";
 
+/** @type {'local' | 'session' | null} */
+let authPersistKind = null;
+
 const MIN_ROUND_MIN = 1;
 const MAX_ROUND_MIN = 5;
 
@@ -173,6 +176,7 @@ const els = {
   loginUsername: document.getElementById("login-username"),
   loginPassword: document.getElementById("login-password"),
   btnLoginTogglePassword: document.getElementById("btn-login-toggle-password"),
+  loginRemember: document.getElementById("login-remember"),
   loginMsg: document.getElementById("login-msg"),
   btnLoginSubmit: document.getElementById("btn-login-submit"),
   btnLoginCancel: document.getElementById("btn-login-cancel"),
@@ -483,9 +487,24 @@ async function mpPost(action, body) {
 }
 
 function loadStoredAuth() {
+  authPersistKind = null;
   try {
-    authToken = localStorage.getItem(LS_AUTH_TOKEN);
-    authUsername = localStorage.getItem(LS_AUTH_USER) || "";
+    const fromLocal = localStorage.getItem(LS_AUTH_TOKEN);
+    if (fromLocal) {
+      authToken = fromLocal;
+      authUsername = localStorage.getItem(LS_AUTH_USER) || "";
+      authPersistKind = "local";
+      return;
+    }
+    const fromSession = sessionStorage.getItem(LS_AUTH_TOKEN);
+    if (fromSession) {
+      authToken = fromSession;
+      authUsername = sessionStorage.getItem(LS_AUTH_USER) || "";
+      authPersistKind = "session";
+      return;
+    }
+    authToken = null;
+    authUsername = "";
   } catch {
     authToken = null;
     authUsername = "";
@@ -493,18 +512,30 @@ function loadStoredAuth() {
   if (!authToken) {
     authToken = null;
     authUsername = "";
+    authPersistKind = null;
   }
 }
 
-function applyAuthResponse(data) {
+/** @param {boolean} [persistLocal] When true, keep token in localStorage (30-day-style login); else session tab storage. */
+function applyAuthResponse(data, persistLocal = true) {
   if (!data?.token) return;
   authToken = data.token;
   authUsername = String(data.username || "");
   authTotal = Number(data.totalPoints) || 0;
   authRank = data.rank != null ? Number(data.rank) : null;
+  authPersistKind = persistLocal ? "local" : "session";
   try {
-    localStorage.setItem(LS_AUTH_TOKEN, authToken);
-    localStorage.setItem(LS_AUTH_USER, authUsername);
+    if (persistLocal) {
+      sessionStorage.removeItem(LS_AUTH_TOKEN);
+      sessionStorage.removeItem(LS_AUTH_USER);
+      localStorage.setItem(LS_AUTH_TOKEN, authToken);
+      localStorage.setItem(LS_AUTH_USER, authUsername);
+    } else {
+      localStorage.removeItem(LS_AUTH_TOKEN);
+      localStorage.removeItem(LS_AUTH_USER);
+      sessionStorage.setItem(LS_AUTH_TOKEN, authToken);
+      sessionStorage.setItem(LS_AUTH_USER, authUsername);
+    }
   } catch {
     /* ignore */
   }
@@ -516,9 +547,12 @@ function clearAuth() {
   authUsername = "";
   authTotal = 0;
   authRank = null;
+  authPersistKind = null;
   try {
     localStorage.removeItem(LS_AUTH_TOKEN);
     localStorage.removeItem(LS_AUTH_USER);
+    sessionStorage.removeItem(LS_AUTH_TOKEN);
+    sessionStorage.removeItem(LS_AUTH_USER);
   } catch {
     /* ignore */
   }
@@ -567,7 +601,11 @@ async function refreshAuthMe() {
     authTotal = Number(data.totalPoints) || 0;
     authRank = data.rank != null ? Number(data.rank) : null;
     try {
-      localStorage.setItem(LS_AUTH_USER, authUsername);
+      if (authPersistKind === "local") {
+        localStorage.setItem(LS_AUTH_USER, authUsername);
+      } else if (authPersistKind === "session") {
+        sessionStorage.setItem(LS_AUTH_USER, authUsername);
+      }
     } catch {
       /* ignore */
     }
@@ -1538,6 +1576,7 @@ els.btnOpenRegister?.addEventListener("click", () => {
 els.btnOpenLogin?.addEventListener("click", () => {
   if (els.loginMsg) els.loginMsg.textContent = "";
   resetLoginPasswordVisibility();
+  if (els.loginRemember) els.loginRemember.checked = false;
   if (els.modalLogin) els.modalLogin.hidden = false;
 });
 
@@ -1573,6 +1612,7 @@ function setAuthFormBusy(kind, busy) {
   if (username) username.disabled = busy;
   if (password) password.disabled = busy;
   if (toggle) toggle.disabled = busy;
+  if (!isReg && els.loginRemember) els.loginRemember.disabled = busy;
 }
 
 els.formRegister?.addEventListener("submit", async (e) => {
@@ -1611,9 +1651,10 @@ els.formLogin?.addEventListener("submit", async (e) => {
   els.loginMsg.textContent = "";
   const username = els.loginUsername.value.trim();
   const password = els.loginPassword.value;
+  const remember = !!els.loginRemember?.checked;
   setAuthFormBusy("login", true);
   try {
-    const { ok, data, status } = await authPost("login", { username, password });
+    const { ok, data, status } = await authPost("login", { username, password, remember });
     if (!ok) {
       els.loginMsg.textContent =
         data.message ||
@@ -1625,7 +1666,7 @@ els.formLogin?.addEventListener("submit", async (e) => {
     setAuthFormBusy("login", false);
     await tryStorePasswordCredential(els.formLogin);
     const displayName = String(data.username || username);
-    applyAuthResponse(data);
+    applyAuthResponse(data, remember);
     window.alert(`Login successful! Welcome back, ${displayName}.`);
     if (els.modalLogin) els.modalLogin.hidden = true;
     els.loginPassword.value = "";
