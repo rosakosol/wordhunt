@@ -27,6 +27,51 @@ const MIN_WORD_LEN = 3;
 /** Optional loop: place `audio/bgm.mp3` next to the site; falls back to soft procedural hum. */
 const BGM_URL = new URL("audio/bgm.mp3", window.location.href).href;
 
+/** One shared element so we can preload early and unlock playback on user gesture. */
+/** @type {HTMLAudioElement | null} */
+let bgmAudioSingleton = null;
+let bgmHtmlUnlockOk = false;
+
+function getOrCreateBgmAudio() {
+  if (!bgmAudioSingleton) {
+    const a = new Audio();
+    a.preload = "auto";
+    a.loop = true;
+    a.src = BGM_URL;
+    a.load();
+    bgmAudioSingleton = a;
+  }
+  return bgmAudioSingleton;
+}
+
+/** Call synchronously inside click/pointer handlers (before any await) so HTMLAudio isn’t blocked by autoplay policy. */
+function primeAudioFromUserGesture() {
+  void resumeSfxContext();
+  if (bgmHtmlUnlockOk) return;
+  const a = getOrCreateBgmAudio();
+  const prev = a.volume;
+  a.volume = 0;
+  const pr = a.play();
+  if (pr !== undefined) {
+    pr.then(() => {
+      a.pause();
+      a.currentTime = 0;
+      a.volume = 0.22;
+      bgmHtmlUnlockOk = true;
+    }).catch(() => {
+      a.volume = prev;
+    });
+  }
+}
+
+function preloadBgmAsset() {
+  try {
+    getOrCreateBgmAudio();
+  } catch {
+    /* ignore */
+  }
+}
+
 const API_MP = "/api/mp";
 const API_AUTH = "/api/auth";
 
@@ -289,9 +334,12 @@ function startProceduralBgm() {
 
 function stopGameMusic() {
   if (gameMusic.html) {
-    gameMusic.html.pause();
-    gameMusic.html.removeAttribute("src");
-    gameMusic.html.load();
+    try {
+      gameMusic.html.pause();
+      gameMusic.html.currentTime = 0;
+    } catch {
+      /* ignore */
+    }
     gameMusic.html = null;
   }
   stopProceduralBgm();
@@ -300,26 +348,37 @@ function stopGameMusic() {
 async function startGameMusic() {
   if (gameMusic.html || gameMusic.proc) return;
   await resumeSfxContext();
-  const a = new Audio();
+  const a = getOrCreateBgmAudio();
   a.loop = true;
   a.volume = 0.22;
-  a.preload = "auto";
-  const canUseHtml = await new Promise((resolve) => {
-    const ok = () => resolve(true);
-    const bad = () => resolve(false);
-    a.addEventListener("canplaythrough", ok, { once: true });
-    a.addEventListener("error", bad, { once: true });
-    a.src = BGM_URL;
-    a.load();
-  });
-  if (canUseHtml) {
+
+  const tryPlayHtml = async () => {
     try {
       await a.play();
       gameMusic.html = a;
-      return;
+      return true;
     } catch {
-      /* autoplay or decode failed */
+      return false;
     }
+  };
+
+  if (a.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+    if (await tryPlayHtml()) return;
+  } else {
+    await new Promise((resolve) => {
+      let settled = false;
+      const fin = () => {
+        if (settled) return;
+        settled = true;
+        a.removeEventListener("canplay", fin);
+        a.removeEventListener("error", fin);
+        resolve();
+      };
+      a.addEventListener("canplay", fin, { once: true });
+      a.addEventListener("error", fin, { once: true });
+      setTimeout(fin, 10000);
+    });
+    if (await tryPlayHtml()) return;
   }
   startProceduralBgm();
 }
@@ -1101,6 +1160,10 @@ function extendPathTo(r, c) {
 }
 
 function onTilePointerDown(e) {
+  if (timerId) {
+    primeAudioFromUserGesture();
+    if (!gameMusic.html && !gameMusic.proc) void startGameMusic();
+  }
   if (!timerId) return;
   e.preventDefault();
   const r = Number(e.currentTarget.dataset.r);
@@ -1431,6 +1494,7 @@ async function createMultiplayerRoom() {
 }
 
 async function hostBeginMatch() {
+  primeAudioFromUserGesture();
   if (!mp.roomId || !mp.secret) return;
   if (hostLobbyPollTimer) {
     clearInterval(hostLobbyPollTimer);
@@ -1588,6 +1652,7 @@ async function loadDictionary() {
     const arr = await res.json();
     wordSet = new Set(arr);
     els.loadStatus.hidden = true;
+    preloadBgmAsset();
   } catch {
     wordSet = null;
     els.loadStatus.hidden = false;
@@ -1611,10 +1676,14 @@ els.btnStart.addEventListener("click", () => {
     els.loadStatus.textContent = "Dictionary not ready. Check words.json and use a local server.";
     return;
   }
+  primeAudioFromUserGesture();
   startSoloRound();
 });
 
-els.btnCreateMp.addEventListener("click", () => createMultiplayerRoom());
+els.btnCreateMp.addEventListener("click", () => {
+  primeAudioFromUserGesture();
+  void createMultiplayerRoom();
+});
 els.btnCopyGuest.addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(els.mpGuestUrl.value);
@@ -1800,6 +1869,16 @@ window.addEventListener("pointerup", onGlobalPointerUp);
 window.addEventListener("pointercancel", onGlobalPointerUp);
 
 syncDurationControls(true);
+
+(function installFirstUserGestureAudioUnlock() {
+  const unlock = () => {
+    primeAudioFromUserGesture();
+    window.removeEventListener("pointerdown", unlock, true);
+    window.removeEventListener("keydown", unlock, true);
+  };
+  window.addEventListener("pointerdown", unlock, { capture: true, passive: true });
+  window.addEventListener("keydown", unlock, { capture: true, passive: true });
+})();
 
 (async () => {
   await loadDictionary();
