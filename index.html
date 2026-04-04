@@ -42,13 +42,13 @@
               type="range"
               id="duration-slider"
               min="1"
-              max="5"
+              max="3"
               step="1"
               value="2"
               aria-valuetext="2 minutes"
             />
             <div class="duration-display">
-              <input type="number" id="duration-input" min="1" max="5" value="2" />
+              <input type="number" id="duration-input" min="1" max="3" value="2" />
               <span class="unit">min</span>
             </div>
           </div>
@@ -88,41 +88,50 @@
       </section>
 
       <section class="game" id="game" hidden>
-        <p class="mp-role-pill" id="mp-role-pill" hidden></p>
-        <div class="hud">
-          <div class="hud-block">
-            <span class="hud-label">Time</span>
-            <span class="hud-value" id="timer">0:00</span>
+        <div class="game-playfield">
+          <p class="mp-role-pill" id="mp-role-pill" hidden></p>
+
+          <div class="game-scoreboard">
+            <div class="game-scoreboard__avatar" aria-hidden="true"></div>
+            <div class="game-scoreboard__main">
+              <div class="game-scoreboard__words">
+                <span class="game-scoreboard__k">Words</span>
+                <span class="game-scoreboard__v" id="found-count">0</span>
+              </div>
+              <div class="game-scoreboard__scoreline">
+                <span class="game-scoreboard__k">Score</span>
+                <span class="game-scoreboard__big" id="score">0</span>
+              </div>
+              <div class="game-scoreboard__oppo" id="hud-opponent-wrap" hidden>
+                <span class="game-scoreboard__k">Opponent</span>
+                <span class="game-scoreboard__oppo-val" id="opponent-score" aria-live="polite">—</span>
+              </div>
+            </div>
+            <div class="game-timer-pill" aria-live="polite">
+              <span id="timer">00:00</span>
+            </div>
           </div>
-          <div class="hud-block">
-            <span class="hud-label">Score</span>
-            <span class="hud-value" id="score">0</span>
+
+          <div class="word-preview-row">
+            <span class="word-preview-pill word-preview-pill--idle" id="current-word">—</span>
           </div>
-          <div class="hud-block hud-block--opponent" id="hud-opponent-wrap" hidden>
-            <span class="hud-label">Opponent</span>
-            <span class="hud-value hud-value--opponent" id="opponent-score" aria-live="polite">—</span>
+
+          <div class="board-wrap">
+            <div class="board-stack">
+              <div class="board" id="board" role="application" aria-label="Letter grid"></div>
+              <svg class="board-path" id="board-path" aria-hidden="true"></svg>
+            </div>
           </div>
-          <div class="hud-block grow">
-            <span class="hud-label">Word</span>
-            <span class="hud-word" id="current-word">—</span>
+
+          <p class="help game-help">Drag across touching letters (including diagonals). Release to submit.</p>
+
+          <div class="found-panel">
+            <h2>Found words <span class="count" id="found-count-list">0</span></h2>
+            <ul class="found-list" id="found-list"></ul>
           </div>
+
+          <button type="button" class="btn btn-end-round" id="btn-end-early">End round</button>
         </div>
-
-        <div class="board-wrap">
-          <div class="board-stack">
-            <div class="board" id="board" role="application" aria-label="Letter grid"></div>
-            <svg class="board-path" id="board-path" aria-hidden="true"></svg>
-          </div>
-        </div>
-
-        <p class="help">Drag across touching letters (including diagonals). Release to submit. Drag back one step to undo.</p>
-
-        <div class="found-panel">
-          <h2>Found words <span class="count" id="found-count">0</span></h2>
-          <ul class="found-list" id="found-list"></ul>
-        </div>
-
-        <button type="button" class="btn ghost" id="btn-end-early">End round</button>
       </section>
 
       <div class="modal" id="modal-end" hidden>

@@ -82,7 +82,7 @@ const LS_AUTH_USER = "wh_auth_user";
 let authPersistKind = null;
 
 const MIN_ROUND_MIN = 1;
-const MAX_ROUND_MIN = 5;
+const MAX_ROUND_MIN = 3;
 
 /** @type {{ active: boolean, role: string | null, roomId: string | null, secret: string | null, endsAt: number | null }} */
 const mp = {
@@ -173,6 +173,7 @@ const els = {
   currentWord: document.getElementById("current-word"),
   foundList: document.getElementById("found-list"),
   foundCount: document.getElementById("found-count"),
+  foundCountList: document.getElementById("found-count-list"),
   btnEndEarly: document.getElementById("btn-end-early"),
   modalEnd: document.getElementById("modal-end"),
   finalScore: document.getElementById("final-score"),
@@ -235,6 +236,12 @@ const els = {
   lbMsg: document.getElementById("lb-msg"),
   btnLbClose: document.getElementById("btn-lb-close"),
 };
+
+function setFoundCountUi(n) {
+  const s = String(n);
+  if (els.foundCount) els.foundCount.textContent = s;
+  if (els.foundCountList) els.foundCountList.textContent = s;
+}
 
 function syncAuthFormActionUrl() {
   try {
@@ -433,7 +440,15 @@ function playInvalidWordSound() {
 function formatTime(sec) {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
-  return `${m}:${s.toString().padStart(2, "0")}`;
+  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+}
+
+function syncGameTimerPill(secondsLeft) {
+  const pill = els.timer?.closest?.(".game-timer-pill");
+  if (!pill) return;
+  pill.classList.remove("low", "critical");
+  if (secondsLeft <= 10) pill.classList.add("critical");
+  else if (secondsLeft <= 30) pill.classList.add("low");
 }
 
 function formatMinutesAria(minutes) {
@@ -903,9 +918,7 @@ function stopGameTimer() {
 function tickTimerSolo() {
   secondsLeft -= 1;
   els.timer.textContent = formatTime(secondsLeft);
-  els.timer.classList.remove("low", "critical");
-  if (secondsLeft <= 10) els.timer.classList.add("critical");
-  else if (secondsLeft <= 30) els.timer.classList.add("low");
+  syncGameTimerPill(secondsLeft);
   if (secondsLeft <= 0) {
     stopGameTimer();
     endRound();
@@ -916,9 +929,7 @@ function tickTimerMulti() {
   if (mp.endsAt == null) return;
   secondsLeft = Math.max(0, Math.ceil((mp.endsAt - Date.now()) / 1000));
   els.timer.textContent = formatTime(secondsLeft);
-  els.timer.classList.remove("low", "critical");
-  if (secondsLeft <= 10) els.timer.classList.add("critical");
-  else if (secondsLeft <= 30) els.timer.classList.add("low");
+  syncGameTimerPill(secondsLeft);
   if (secondsLeft <= 0) {
     stopGameTimer();
     endRound();
@@ -978,20 +989,11 @@ function updatePathLine() {
   const pointsStr = centers.map((p) => `${p.x},${p.y}`).join(" ");
 
   if (centers.length >= 2) {
-    const halo = document.createElementNS(SVG_NS, "polyline");
-    halo.setAttribute("class", "path-halo");
-    halo.setAttribute("points", pointsStr);
-    halo.setAttribute("fill", "none");
-    halo.setAttribute("stroke-width", "12");
-    halo.setAttribute("stroke-linecap", "round");
-    halo.setAttribute("stroke-linejoin", "round");
-    svg.appendChild(halo);
-
     const line = document.createElementNS(SVG_NS, "polyline");
     line.setAttribute("class", "path-line");
     line.setAttribute("points", pointsStr);
     line.setAttribute("fill", "none");
-    line.setAttribute("stroke-width", "4");
+    line.setAttribute("stroke-width", "8");
     line.setAttribute("stroke-linecap", "round");
     line.setAttribute("stroke-linejoin", "round");
     svg.appendChild(line);
@@ -1059,9 +1061,23 @@ function updatePathUI() {
   });
   const w = path.length ? pathToWord(board, path) : "";
   if (els.currentWord) {
-    els.currentWord.textContent = w ? w.toUpperCase() : "—";
-    els.currentWord.classList.remove("hud-word--pending", "hud-word--valid", "hud-word--invalid");
-    if (pathVisual) els.currentWord.classList.add(`hud-word--${pathVisual}`);
+    const pill = els.currentWord;
+    pill.classList.remove(
+      "word-preview-pill--idle",
+      "word-preview-pill--pending",
+      "word-preview-pill--valid",
+      "word-preview-pill--invalid",
+    );
+    if (!w) {
+      pill.textContent = "—";
+      pill.classList.add("word-preview-pill--idle");
+    } else {
+      const upper = w.toUpperCase();
+      const len = w.length;
+      const pts = len >= MIN_WORD_LEN ? scoreForWord(len) : 0;
+      pill.textContent = len >= MIN_WORD_LEN ? `${upper} (+${pts})` : upper;
+      if (pathVisual) pill.classList.add(`word-preview-pill--${pathVisual}`);
+    }
   }
   requestAnimationFrame(() => updatePathLine());
 }
@@ -1209,7 +1225,7 @@ function submitPath() {
   li.textContent = `${word} +${pts}`;
   li.classList.add("new");
   els.foundList.prepend(li);
-  els.foundCount.textContent = String(foundWords.size);
+  setFoundCountUi(foundWords.size);
   if (mp.active) schedulePushMpLiveScore();
 }
 
@@ -1243,9 +1259,7 @@ function enterMultiGameFromState(st) {
 
   els.score.textContent = "0";
   els.foundList.replaceChildren();
-  els.foundCount.textContent = "0";
-  els.timer.classList.remove("low", "critical");
-  els.currentWord.textContent = "—";
+  setFoundCountUi(0);
 
   renderBoard();
   updatePathUI();
@@ -1261,6 +1275,7 @@ function enterMultiGameFromState(st) {
   if (mp.endsAt != null && Date.now() >= mp.endsAt) {
     secondsLeft = 0;
     els.timer.textContent = formatTime(0);
+    syncGameTimerPill(0);
     endRound();
     return;
   }
@@ -1436,10 +1451,9 @@ function startSoloRound() {
 
   els.score.textContent = "0";
   els.foundList.replaceChildren();
-  els.foundCount.textContent = "0";
+  setFoundCountUi(0);
   els.timer.textContent = formatTime(secondsLeft);
-  els.timer.classList.remove("low", "critical");
-  els.currentWord.textContent = "—";
+  syncGameTimerPill(secondsLeft);
 
   renderBoard();
   updatePathUI();

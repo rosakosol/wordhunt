@@ -93,7 +93,7 @@ export default async function handler(req, res) {
     if (action === "create" && req.method === "POST") {
       const { board, durationMinutes } = body;
       const dm = Number(durationMinutes);
-      if (!isValidBoard(board) || !Number.isFinite(dm) || dm < 1 || dm > 60) {
+      if (!isValidBoard(board) || !Number.isFinite(dm) || dm < 1 || dm > 3) {
         res.status(400).json({ error: "invalid_body", message: "Invalid board or duration." });
         return;
       }
